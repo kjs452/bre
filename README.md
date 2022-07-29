@@ -179,5 +179,6 @@ rule 025 using ORDER-HEADER is
 		FooBar["XX", "00", "00", S, "1", "0"] <> null
 			or
 		FooBar[ORD-SEC-NUM[0:2], "00", "00", S, "1", "0"] <> null
-	```
+	
+```
   
