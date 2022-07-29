@@ -1,0 +1,215 @@
+1/8/98
+
+		*** BRE LANGUAGE EXTENTIONS ***
+
+INTRODUCTION:
+-------------
+In order to handle some new rules, the following langauge
+features have been added to BRE. These features will allow
+rules that perform more complex edits against the order data.
+
+	1) NEW LIST OPERATORS
+	2) TABLE GROUPING
+
+1. NEW LIST OPERATORS
+---------------------
+	rule ex1 is
+		lst1: {integer};
+		lst2: {string};
+
+A. Adding elements to a list.
+-----------------------------
+The '+' operator will allow a new element to be
+appended  to the beginning or end of a list. For example.
+
+	rule ex1 is
+		lst1: {integer};
+		lst2: {string};
+
+	lst1 := {1, 2, 3};
+	lst1 := lst1 + 4;
+
+	lst2 := null;
+	lst2 := (lst2 + "hello") + "world";
+
+The BRE statements show above, will modify the lists 'lst1' and 'lst2'.
+After these statements are executed 'lst1' will be: {1, 2, 3, 4}.
+'lst2' will be: {"hello", "world"}
+
+B. Indexing a list.
+-------------------
+It is possible to access an element from a list using the index
+operator '[]'. For example,
+
+	rule ex2 is
+		list: {float};
+
+		list := {1.2, 34.5, 90.001, 19.95};
+
+		list[0] + list[3] = 91.201;
+
+List element are zero based. That is, the first element of the list
+is accessed using 0.
+
+C. Sub-list operator
+--------------------
+The substring operator (ie. ENTRY-KEY[0:2]) has been extended
+to also be a sub-list operator. The sub-list operator will
+return a new list from the original. For example,
+
+	rule ex3 is
+		list1, list2: {string};
+
+		list1 := { "who", "is", "john", "galt" };
+
+		list2 = list1[2:2];
+
+After these statements execute, 'list2' will be: { "john", "galt" }
+The substring operator, should
+
+2. TABLE GROUPING
+------------------
+The following discussion will refer to the following
+example database table:
+
+				Table Name: ORDER_TABLE
+
+	    ITEM            LN               K-CODE         QUANTITY         AMOUNT
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | ABC		|    1		|		|		|	19.95	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| ABC		|    2		|		|		|	5.85	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | ABC		|    3		|		|		|	2.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| ABC		|    4		|		|		|	3.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | XXX		|    1		|		|		|	34.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | XXX		|    2		|		|		|	99.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | FOO		|    1		|		|		|	100.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| FOO		|    2		|		|		|	150.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | FOO		|    3		|		|		|	160.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par,x-> | CAT		|    1		|		|		|	200.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | APPLE		|    1		|		|		|	1999.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    2		|		|		|	2048.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | APPLE		|    3		|		|		|	850.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    4		|		|		|	1010.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    5		|		|		|	799.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+The table above has been divided into groups based on the field 'ITEM'. The ordering
+is important, as it allows BRE to process each group separately. The variable
+names 'par' and 'x' indicate table row pointer variables that will be setup
+when looping through a table that has been partitioned in this way.
+
+The variable called 'par' will always point to the first record of each group.
+The variable called 'x' will be iteratively set to each record in the group
+(including the first one).
+
+	A. Defining a group
+	B. Using the group in for all/for some loops.
+	C. Using the group in compute loops.
+	D. Using the group in group functions (such as MIN/MAX and SUM)
+
+A. Defining a group
+-------------------
+Before you can loop through tables using the defined partitions, you will need
+to define a group. A group is defined outside of any rule and must be
+defined before it can be used. The name of the group will be used inside of
+the other language constructs (described in parts B, C and D).
+The basic format of a group expression is:
+
+	group <group name> using <table name> is
+		<boolean expression>
+
+The following example defines a group for the ORDER_TABLE show above:
+
+	group ORDER_GROUP using ORDER_TABLE is
+		current_row.ITEM = previous_row.ITEM
+
+This boolean expression describes a relationship between the rows in the table.
+In particular the variable 'current_row' and 'previous_row' can be
+used to define groups based on the current row and the row before it.
+The boolean expression should return FALSE when 'current_row' and
+'previous_row' are straddling a boundary between groups.
+
+
+B. Using the group in for all/for some loops.
+---------------------------------------------
+Example,
+
+	for all par, x in ORDER_GROUP
+		<expression>
+
+The FOR ALL (and FOR SOME) loop can be applied to a group. To
+do this simply use the name of the defined group in place of
+a table name. You must also provide TWO variables instead of 1.
+
+The first variable will be set to the first row of each group
+in the table. The second variable will be set to each row.
+in the table. Whenever a group boundary is reached, the variable
+'par' will be set to the first row of the next group.
+
+The FOR ALL / FOR SOME loops will loop exactly n times. Where
+n is the number of rows in the table.
+
+Semantics of FOR ALL:
+For all groups, all rows in the group must cause <expression> to be TRUE.
+	
+Semantics of FOR SOME:
+For all groups, at least one row must cause <expression> to
+return TRUE.
+
+C. Using the group in compute loops.
+------------------------------------
+Example,
+	list: {float};
+
+	list := (for par, x in ORDER_GROUP compute sum(AMOUNT))
+
+'list' will be set to: { 30.00, 134.98, 410.0, 200.0, 6707.98 }
+
+Normal compute loops return a single value (an integer, string or float).
+However, when a GROUP name is being used, the return is a LIST of values.
+One value per group.
+
+For example, the # of groups show above is 5. Therefore all compute loops
+will return lists with 5 elements.
+
+	count_list: {integer};
+	count_list := (for par, x in ORDER_GROUP compute count)
+
+'count_list' will be: {4, 2, 3, 1, 5};
+
+D. Using the group in group functions (such as MIN/MAX and SUM)
+---------------------------------------------------------------
+Example,
+	list1, list2, list3: {float};
+
+	list1 := max(ORDER_GROUP.AMOUNT);
+	list2 := min(ORDER_GROUP.AMOUNT);
+	list3 := sum(ORDER_GROUP.AMOUNT);
+
+The values for list1, list2, and list3 will be:
+list1 -> { 19.95,  99.99,  160.0,  200.0,  2048.00 }
+list2 -> {  2.00,  34.99,  100.0,  200.0,   799.00 }
+list3 -> { 30.00, 134.98,  410.0,  200.0,  6707.98 }
+

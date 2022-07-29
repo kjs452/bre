@@ -1,0 +1,207 @@
+#
+# BRE fatal errors.
+#
+[BREMSG_DIE_NOMEM] Fatal Error: Out of memory.
+[BREMSG_DIE_REALLOC] Fatal Error: Cannot realloc() memory.
+
+#
+# BRE Lexical Errors.
+#
+[BREMSG_LEX_INVCHR] invalid character !1 (octal) in input
+[BREMSG_LEX_STRBIG] string too large
+[BREMSG_LEX_EOFSTR] EOF in string
+[BREMSG_LEX_INVSTR] invalid character in string
+[BREMSG_LEX_BIGNUM] number too bloody long!
+[BREMSG_LEX_INVNUM] invalid number !1
+[BREMSG_LEX_EOFCOM] EOF in comment
+
+#
+# Yacc errors.
+#
+[BREMSG_YACC_SYNTAX] parsing error '!1'
+
+# Generic parse errors
+[BREMSG_INCOMPATABLE_TYPES] incompatible types for the !1 operator
+[BREMSG_WRONG_RIGHT] wrong type for right operand of !1
+[BREMSG_WRONG_TYPES] wrong types for '!1' operator
+[BREMSG_UNKNOWN_IDENTIFIER] unknown identifier '!1'
+[BREMSG_NOSUCH_FIELD] no such field '!1' in table '!2'
+[BREMSG_ILLEGAL_CONTEXT] illegal context for !1 '!2'
+[BREMSG_NAME_CLASH] name '!1' clashes with a previosly declared !2
+[BREMSG_BAD_DECL] illegal declaration using !1 identifier '!2'
+[BREMSG_NOT_INIT] variable '!1' is not initialized before being used
+
+# Parse errors: IF
+[BREMSG_IF_NOBOOL] non-boolean type for IF conditional expression
+
+# Parse errors: logical operators
+[BREMSG_LOG_LNBOOL] left operand of !1 must have boolean type
+[BREMSG_LOG_RNBOOL] right operand of !1 must have boolean type
+
+# Parse errors: IN operator
+[BREMSG_IN_BADRIGHT] right operand of !1 must be list or string
+
+# Parse errors: BETWEEN
+[BREMSG_BETWEEN_TWO] list must have 2 elements for the !1 operator
+[BREMSG_BETWEEN_RIGHT] right operand of !1 must be a list
+
+# Parse errors: LIKE
+[BREMSG_LEFT_STR] left operand of !1 must be a string
+[BREMSG_RIGHT_STR] right operand of !1 must be a string
+
+# Parse errors: EQUALITY
+
+# Parse errors: RELATIONAL
+
+# Parse errors: ADD
+[BREMSG_ADD_ERR] operands for '+' must be numerical or a string
+
+# Parse errors: Arithmetic
+[BREMSG_NOTINTEGER] '!1' operator requires integers operands
+[BREMSG_NUMERICAL] operands for '!1' must be numerical
+
+# Parse errors: Group functions
+[BREMSG_GROUP_ARGS] !1() group function missing required argument
+[BREMSG_COUNT_ARGS] COUNT cannot have an argument in this context
+[BREMSG_GROUP_INVTYPE] invalid type for !1() group function
+
+# Parse errors: Group functions (stand-alone)
+
+# Parse errors: check function arguments
+[BREMSG_ARGS_FEW] too few arguments to function '!1', !2 <> !3
+[BREMSG_ARGS_MANY] too many arguments to function '!1', !2 <> !3
+[BREMSG_ARGS_INCOMPATIBLE] incompatible types for argument !1, !2 <> !3
+
+# Parse errors: check function names
+[BREMSG_NOSUCH_FUNCTION] no such function named '!1'
+[BREMSG_INV_FUNCCALL] illegal function call using !1 '!2'
+[BREMSG_INV_RECURSE] illegal recursive function call to '!1'
+
+# Parse errors: lists
+[BREMSG_LIST_TYPE] !1 is not allowed inside a list (list item !2)
+[BREMSG_LIST_NULL] null is not allowed inside a list (list item !1)
+
+# Parse errors: OLD operator
+[BREMSG_OLD_ERR] OLD operator can only be applied to a field reference
+
+# Parse errors: rownum()
+[BREMSG_ROWNUM_TYPE] invalid type for !1 function
+
+# Parse errors: substring operator
+[BREMSG_SUBSTR_INT1] 1st substring expression must be of integer type
+[BREMSG_SUBSTR_INT2] 2nd substring expression must be of integer type
+[BREMSG_SUBSTR_COMPAT] !1 type not compatible with the substring operator [n:m]
+
+# Parse errors: variables
+[BREMSG_UNDEF_VAR] undefined identifier '!1'
+[BREMSG_INVCONTEXT_LOOKUP] invalid context for lookup table '!1'
+
+# Parse errors: indexing
+[BREMSG_ILLEGAL_INDEXING] illegal indexing for table '!1'
+[BREMSG_NONINT_INDEXING] non-integer indexing type for table '!1'
+[BREMSG_INDEX_VARPAR] illegal indexing for !1 '!2' (not a list type)
+[BREMSG_VARPAR_NOTINT] illegal non-integer indexing for !1 '!2'
+
+# Parse errors: lookup table indexing
+[BREMSG_MANY_KEYS] too many keys for lookup table '!1' (should be !2)
+[BREMSG_FEW_KEYS] too few keys for lookup table '!1' (should be !2)
+[BREMSG_INVTYPE_KEYS] wrong type for key !1 in lookup '!2', !3 <> !4
+
+# Parse errors: indexd table
+[BREMSG_INVINDEX_FIELD] illegal indexing operation on field '!1'
+
+# Parse errors: table field access
+[BREMSG_MISSING_KEYS] missing search keys for lookup '!1'
+
+
+# Parse errors: id list
+[BREMSG_CLASH_FIELDTABLE] name '!1' clashes with a field in table !2
+[BREMSG_DUPLICATE_VAR] duplicate variable '!1'
+
+# Parse errors: string iterator
+[BREMSG_BAD_STRITERATE] multiple variables in !1 not allowed for string expressions
+
+# Parse errors: list iterator
+[BREMSG_LSIZE_UNKNOWN] list size unknown in !1
+[BREMSG_WRONG_NVARS] wrong number of variables in !1
+[BREMSG_VARTYPE_NOTMATCH] !1 variable '!2' does not match list item !3
+
+# Parse errors: table iterator
+[BREMSG_ILLEGAL_MULTIVAR] multiple variables in !1 not allowed for table expressions
+[BREMSG_NOTTABLE_EXPR] !1 expression is not a table name
+[BREMSG_INV_TABLEEXPR] invalid table expression in !1
+
+# Parse errors: iterator
+[BREMSG_BAD_ITERATOR] !1 expression not allowed as the !2 iterator
+
+# Parse errors: for all, for some
+[BREMSG_BOOLEAN_REQUIRED] !1 requires a boolean expression
+
+# Parse errors: compute
+[BREMSG_BADARGS_COUNT] too many arguments to COUNT in COMPUTE expression
+
+# Parse errors: declare types
+[BREMSG_UNKNOWN_TABLE] unknown table name '!1' used in type declaration
+[BREMSG_BAD_TYPE] !1 '!2' cannot be used as a type declaration
+
+# Parse errors: declare parameter
+[BREMSG_BAD_REDECL] illegal redeclaration of !1
+
+# Parse errors: declare type
+[BREMSG_CLASH_FIELD] name '!1' clashes with a field name
+[BREMSG_UNEXPECTED_DECL] unexpected variable declaration
+[BREMSG_VAR_CONTEXT] invalid context for variable declaration '!1'
+
+# Parse errors: declare rule
+[BREMSG_REDEF_CURROW] illegal redefinition of 'current_row'
+[BREMSG_REDEF_PRVROW] illegal redefinition of 'previous_row'
+[BREMSG_RULE_CLASH] rule id '!1' clashes with a previously declared !2
+[BREMSG_UNKNOWN_TABLENAME] unknown table name '!1' specified
+[BREMSG_TABLE_EXPECTED] !1 name '!2' where table name was expected
+[BREMSG_EMPTY_RULE] rule '!1' is empty
+[BREMSG_RULE_BOOLEAN] rule '!1' does not evaluate to a boolean type
+
+# Parse errors: declare function
+[BREMSG_FUNC_CLASH] function name '!1' clashes with a previously declared !2
+[BREMSG_DUP_PARAM] duplicate parameter name '!1'
+[BREMSG_PARM_CLASH] parameter name '!1' clashes with a previously declared !2
+[BREMSG_EMPTY_FUNC] function '!1' is empty
+[BREMSG_INV_RETURN] invalid return type for function '!1'
+
+# Parse errors: declare group
+[BREMSG_GROUP_CLASH] group name '!1' clashes with a previosuly declared !2
+[BREMSG_GROUP_USING] missing using clause for group '!1'
+[BREMSG_GROUP_RETURN] expression in group '!1' must be boolean
+[BREMSG_GROUP_VARS] !1 with GROUP expression must have exactly 2 variables
+
+# Parse errors: declare constant
+[BREMSG_CONST_CLASH] constant name '!1' clashes with a previously declared !2
+[BREMSG_NON_CONSTANT] non-constant expression encountered for '!1'
+
+# Parse errors: declare external object
+[BREMSG_DYNAMIC_LOOKUP] dynamically linked symbol '!1' is a lookup table returning !2 values
+[BREMSG_FUNCPARM_UNIQUE] external function parameter '!1' is not unique
+[BREMSG_EXTFUNC_MANYARGS] too many parameters specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_EXTFUNC_FEWARGS] too few parameters specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_EXTFUNC_CLASH] external function name '!1' clashes with a previously declared !2
+[BREMSG_SYM_NOTLINKED] symbol '!1' has not been dynamically linked
+[BREMSG_KEY_NOTUNIQUE] lookup key name '!1' is not unique
+[BREMSG_MANYKEYS_LINKED] too many keys specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_FEWKEYS_LINKED] too few keys specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_LOOKUPFIELD_UNIQUE] external lookup field '!1' is not unique
+[BREMSG_MANYFIELDS_LINKED] too many fields specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_FEWFIELDS_LINKED] not enough fields specified for dynamically linked symbol '!1' (should be !2)
+[BREMSG_EXTLOOKUP_CLASH] external lookup name '!1' clashes with a previously declared !2
+
+# Parse errors: error clause
+[BREMSG_ERROR_ARGS] argument !1 in !2 clause must be a basic type
+
+# Parse errors: assignment
+[BREMSG_ILLEGAL_ASSIGNFIELD] illegal assignment to the field '!1'
+[BREMSG_NOSUCH_VAR] no such variable '!1'
+[BREMSG_ILLEGAL_ASSIGN] illegal assignment to !1 '!2'
+[BREMSG_ASSIGN_TYPES] incompatible types in assigment !1 <> !2
+
+# Parse error: statement
+[BREMSG_MIXED_LIST] list containing mixed data types is not allowed here
+[BREMSG_PARM_NOTDECL] parameter '!1' not declared completely

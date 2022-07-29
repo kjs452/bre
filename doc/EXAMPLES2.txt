@@ -1,0 +1,30 @@
+--
+-- Sample rules for the sample_prog program.
+--
+
+rule 1 using EMPLOYEE is
+	max(SALARY) = 81000.0;
+
+rule 2 using EMPLOYEE is
+	if FIRST-NAME = "Ken" then
+		LAST-NAME = "Stauffer";
+
+rule 3 using PRODUCT is
+	if PRODCODE[0:1] = "B" then
+		GROUP-CODE = "BATH";
+
+rule 4 using PRODUCT is
+	if PRICE = 21.50 then
+		GROUP-CODE = "COMPUTER";
+
+rule 5 using PRODUCT is
+	sum(PRICE) < 800;
+
+external function valid-date(str)
+
+rule 6 is
+	for all f in EMPLOYEE
+		if f.EMPNUM <> 2299 then
+			valid-date(f.START-DATE);
+fail with: f.FIRST-NAME, f.LAST-NAME
+

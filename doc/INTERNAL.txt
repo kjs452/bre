@@ -1,0 +1,958 @@
+2/11/98
+
+BRE INTERNAL DOCUMENTATION
+--------------------------
+1.0 EXTERNAL INTERFACE
+----------------------
+  +---------------------------------------------------------------------------------+
+  |                                YOUR APPLICATION                                 |
+  + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  |                                              +------------------------------+   |
+  |                                              |         BRE LIBRARY          |   |
+  |+----------------------+                      +------------------------------+   |
+  ||(1) Register Callbacks|--------------------->|                              |   |
+  |+----------------------+                      |                              |   |
+  |         *bre_register_table()                |                              |   |
+  |         *bre_register_table_field()          |                              |   |
+  |         *bre_register_table_row_count()      |                              |   |
+  |          bre_register_tell_field_referenced()|       B   R   E              |   |
+  |          bre_register_external()             |       U   U   N              |   |
+  |          bre_register_query_row_change()     |       S   L   G              |   |
+  |         *bre_register_query_field_data()     |       I   E   I              |   |
+  |          bre_register_emit_rule_diagnostic() |       N       N              |   |
+  |                                              |       E       E              |   |
+  |+------------------------+                    |       S                      |   |
+  ||(2) Compile Rule file(s)|------------------->|       S                      |   |
+  |+------------------------+                    |                              |   |
+  |         *bre_compile_rules()                 |                              |   |
+  |                                              |                              |   |
+  |                     BRE_REFERENCED_CB <------|                              |   |
+  |                                              |                              |   |
+  |+------------------+                          |                              |   |
+  ||(3) Evaluate rules|------------------------->|                              |   |
+  |+------------------+                          |                              |   |
+  |         *bre_evaluate_rules()                |                              |   |
+  |                                              |                              |   |
+  |                     BRE_ROWCOUNT_CB <--------|                              |   |
+  |                     BRE_ROWCHANGED_CB <------|                              |   |
+  |                     BRE_FIELD_QUERY_CB <-----|                              |   |
+  |                     BRE_EXTERNAL_CB <--------|                              |   |
+  |                     BRE_RULEDIAG_CB <--------|                              |   |
+  |                                              |                              |   |
+  |+------------------------+                    |                              |   |
+  ||(4) Shutdown BRE library|------------------->|                              |   |
+  |+------------------------+                    +------------------------------+   |
+  |          bre_shutdown()                                                         |
+  |                                                                                 |
+  +---------------------------------------------------------------------------------+
+                        - '*' denotes a mandatory function call.
+
+The BRE library is an independent library that provides an
+API for applying business rules to database tables and fields.
+
+The basic steps for using the BRE library are as follows:
+	1. Register the call back functions.
+		a. bre_register_table() - required.
+		b. bre_register_table_field() - required.
+		c. rowcount callback - required.
+		d. field query callback - required.
+		e. field referenced callback - optional
+		f. row changed callback - optional
+		g. rule diagnostics callback - optional.
+		h. Register the external lookup tables - optional.
+		i. Register the external C functions - optional.
+
+	2. Compile rules file(s). - Required.
+
+	3. For each database object to validate, evaluate the rules. - Required.
+
+	4. Shutdown the library with bre_shutdown().
+
+
+2.0 INTERNAL DESIGN
+-------------------
+The BRE module consists of a YACC parser, lexical analyser, symbol table
+byte-code compiler, and byte-code evaluator. The general architecture looks
+something like this:
+
+  +---------------------------------------------------------------------------------+
+  |                                     BRE API                                     |
+  + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  |                                                                                 |
+  | +----------+                                                                    |
+  | |          |                                                                    |
+  | |  Symbol  | <-------+                                                          |
+  | |  Table   |         |                                                          |
+  | |          |         |                                                          |
+  | +----------+         |                                                          |
+  |                      |                                                          |
+  |                      V                                                          |
+  | +----------+     +----------+     +-----------+                                 |
+  | |          |     |          |     |           |                                 |
+  | | Lexical  | --> |   YACC   | --> | Byte-code | -----+                          |
+  | | Analyzer |     |  Parser  |     | Compiler  |      |                          |
+  | |          |     |          |     |           |      |                          |
+  | +----------+     +----------+     +-----------+      |                          |
+  |                                                      |                          |
+  |                                                      V                          |
+  |   s-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----s     |
+  |     ... |     |     |     |     |     |     |     |     |     |     | ...       |
+  |   s-----+-----+-----+-----+---V-+-----+-----+-----+-----+-----+-----+-----s     |
+  |                               |                   The Byte-Code Program         |
+  |                               |                                                 |
+  |             +-----------+     |                                                 |
+  |             |           |     |                                                 |
+  |             | Byte-Code | <---+                                                 |
+  |             | Evaluator |                                                       |
+  |             |           |                                                       |
+  |             +-----------+                                                       |
+  |                                                                                 |
+  +---------------------------------------------------------------------------------+
+
+* BRE API:
+	All of the components of BRE are wrapped around a set of functions that
+	comprises the BRE API.
+	Source Files:	bre_api.c	- Public functions for bre library.
+			bre_api.h	- Public header file
+			bre_prv.h	- Private Header File for BRE.
+
+	Function names:	bre_XXXXXXX()
+
+* Symbol Table:
+	This component will keep track of table and field names. When an external
+	lookup or C function is added, the name will be placed into the symbol table.
+	Source Files:	bre_sym.c	- Symbol Table Routines and Data Structure
+			bre_sym.h	- Header file for bre_sym.h
+
+	Function names:	sym_XXXXXXXX()
+
+* Lexical Analyzer:
+	This module reads the input file and collects individual characters into
+	tokens which are then passed to the parser.
+	Source Files: bre_lex.c		- definition of the yylex() routine
+
+	Function names:	yylex()
+	This name is the default function name required by yacc.
+
+* Yacc Parser:
+	The grammar rules for the BRE language are matched using yacc. As each major language
+	construct it parsed, a parse tree is constructed.
+	Source Files:	bre_yac.y	- Yacc Grammar
+			bre_par.c	- Parse Tree Builder & Semantic Checker
+			bre_par.h	- Header file for bre_par.c
+
+	Function names:	yyparse()	<- default yacc function
+			expr_XXXXXXX()
+
+* Byte-code Compiler:
+	When an expression has been completely parsed and put into a parse tree, the
+	byte-code compiler is invoked to convert the parse tree into byte-codes.
+
+	Byte-codes consist of OPCODES and OPERANDS that are placed into a byte stream.
+	Opcodes consists of simple stack oriented instructions such as "PUSH INTEGER",
+	"POP", "ADD", etc..
+	Source Files:	bre_gen.c	- Byte-Code generation
+			bre_ops.h	- Definition of the BRE OPCODES
+
+	Function names:	gencode_XXXXXX()
+
+* Byte-code Evaluator:
+	When checking a database object against the rules, the byte-code evaluator will
+	interpret the byte codes for all rules. Each rule returns a logical true or false,
+	which determines the success or failure of a rule.
+	Source Files:	bre_run.c	- "run" (evaluation) of a rule.
+			bre_ops.h	- Definition of the BRE OPCODES.
+
+	Function names:	run_XXXXXXX()
+			prog_XXXX()	<- byte-code manipulation routines
+			mem_XXXX()	<- execution time memory managemet routines
+			op_XXXXXX()	<- byte code instructions
+				
+
+* Misc.:
+	Source Files:	bre_bit.c	- Set routines (currently not in use)
+			bre_bit.h	- header file for bre_bit.c
+
+	Function names: bit_XXXXX()	<- currently these routines are not used.
+
+	Source Files:	bre_err.c	- Error Handling for parser.
+			bre_err.h	- header file for bre_err.c
+
+	Function names: bre_clear_errors()
+			bre_error_count()
+			Bre_Parse_Error()
+			Bre_Parse_Warn()
+			Bre_Parse_Message()
+			Bre_Error()
+
+For more information see the BRE Internal documenation.
+
+
+	########################################
+	##### bre_sym.c                    #####
+	########################################
+/*----------------------------------------------------------------------
+ * Symbol table data structure:
+ *
+ *   HashTable[ 2011 ]
+ *   +----------+
+ *   |		|
+ *   +----------+
+ *   |		|	SYMBOL
+ *   +----------+	+-------+    +-------+    +-------+    +-------+
+ *   |		| -->	|       | -> |       | -> |       | -> |       | -> NULL
+ *   +----------+	+-------+    +-------+    +-------+    +-------+
+ *   |		|
+ *   +----------+
+ *   |		|
+ *   +----------+
+ *
+ *	...
+ *
+ *   +----------+
+ *   |		|
+ *   +----------+	+-------+    +-------+    +-------+
+ *   |		| -->	|       | -> |       | -> |       | -> NULL
+ *   +----------+	+-------+    +-------+    +-------+
+ *   |		|
+ *   +----------+
+ *   |		|
+ *   +----------+	+-------+
+ *   |		| -->	|       | -> NULL
+ *   +----------+	+-------+
+ *   |		|
+ *   +----------+
+ *   |		|
+ *   +----------+
+ *   |		|
+ *   +----------+
+ *
+ * Operations:
+ *	LOOKUP(id) -	1) Hash identifier 'id'
+ *			2) Index into HashTable[] using the hash value.
+ *			3) Scan the linked list of symbols for a match.
+ *			4) Return the matching symbol or NULL.
+ *
+ *	INSERT(id) -	1) Hash identifier 'id'
+ *			2) Index into HashTable[] using the hash value.
+ *			3) Allocate a new SYMBOL structure (and populate with 'id').
+ *			4) Insert new symbol to the head of the linked list.
+ *
+ *	DETACH(sym)	1) Hash sym->name
+ *			2) Index HashTable[]
+ *			3) Search for symbol in linked list.
+ *			4) Remove symbol from linked list.
+ *
+ *	REMOVE(sym)	1) Perform DETACH(sym)
+ *			2) Free the symbol structure.
+ */
+
+
+	########################################
+	##### bre_lex.c                    #####
+	########################################
+/*----------------------------------------------------------------------
+ * action[] array:
+ * --------------
+ *	- This array contains a byte for each ASCII character.
+ *	- This byte is divided into two parts:
+ *		T = TOKEN TYPE
+ *		C = Charater class.
+ *
+ *	- The mask value 'ACTION_MASK' is used to extract the
+ *	  different component from this byte.
+ *
+ *	+-------+-------+------- + -----+-------+-------+-------+-------+
+ *	|	|	|	 |	|	|	|	|	|
+ *	|   C1	|   C2	|   C3	 |   T	|   T	|   T	|   T	|   T	|
+ *	|	|	|	 |	|	|	|	|	|
+ *	+-------+-------+------- + -----+-------+-------+-------+-------+
+ *
+ *	TTTTT =	These bits define an integer enumeration. Which can be
+ *		one of: {ER, WS, ST, SF, NM, ID, EF, t1, t2, t3, t4}
+ *
+ *	CCC =	These 3 bits are used to classify each ascii character.
+ *		Each bit has the following meaning:
+ *		C1 = 1 if the character is valid inside a number/float token.
+ *		C2 = 1 if the character is valid inside a string.
+ *		C3 = 1 if the character is valid in an identifier.
+ *
+ * THE TOKENIZER ALGORITHM:
+ * ------------------------
+ *	1. Read a character 'c' from the input.
+ *	2. Index the 'action[c]' array using the character 'c'.
+ *	3. Apply the ACTION_MASK and switch() on the action type.
+ *	4. A large switch() statement handles each token type.
+ *
+ * FIGURING OUT WHAT'S IN THE action[] ARRAY
+ * -----------------------------------------
+ *	To understand how the action[] array is initialized, look
+ *	at the entry for the letter 'A':
+ *		ID|SI
+ *
+ *	'ID' is from the enumeration and 'SI' is a #define for
+ *	the bits {C1, C2, C3}
+ *
+ *	ID = this means that when 'A' is the first character of
+ *	     a token, then it is going to be an identifier.
+ *
+ *	SI = this means that the letter 'A' can ligitimately appear
+ *	     inside of a string token or an identifier token.
+ */
+
+	########################################
+	##### bre_yac.y                    #####
+	########################################
+%start program
+
+%%
+program		: decl_list
+		;
+
+decl_list	: declaration
+		| decl_list declaration
+		;
+
+declaration	: constant_decl
+		| function_decl
+		| group_decl
+		| external_func
+		| external_lookup
+		| rule_decl
+		;
+
+external_func	: EXTERNAL FUNCTION IDENTIFIER parameters
+							{ declare_extfunc($3, $4); }
+		;
+
+external_lookup	: EXTERNAL LOOKUP IDENTIFIER '[' id_list ']' '.' '{' id_list '}'
+							{ declare_lookup($3, $5, $9); }
+		;
+
+constant_decl	: CONSTANT IDENTIFIER IS expr		{ declare_constant($2, $4); }
+		;
+
+function_decl	: FUNCTION IDENTIFIER parameters IS 	{ declare_func($2, $3); }
+				stmt_list		{ terminate_func(); }
+		;
+
+group_decl	: GROUP IDENTIFIER using_clause IS	{ declare_group($2, $3); }
+						expr	{ terminate_group($6); }
+		;
+
+rule_decl	: RULE rule_id using_clause IS		{ declare_rule($2, $3); }
+				stmt_list error_clause	{ terminate_rule($7); }
+		;
+
+parameters	: '(' id_list ')'			{ $$ = $2; }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+id_list		: IDENTIFIER				{ $$ = idlist(NULL, $1); }
+		| id_list ',' IDENTIFIER		{ $$ = idlist($1, $3); }
+		;
+
+rule_id		: IDENTIFIER				{ $$ = $1; }
+		| INTEGER				{ $$ = make_ruleid($1); }
+		;
+
+using_clause	: USING IDENTIFIER			{ $$ = $2; }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+error_clause	: WARN WITH ':' error_exprs		{ $$ = expr_error(E_WARN, $4); }
+		| FAIL WITH ':' error_exprs		{ $$ = expr_error(E_FAIL, $4); }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+error_exprs	: expr					{ $$ = expr_args(NULL, $1); }
+		| error_exprs ',' expr			{ $$ = expr_args($1, $3); }
+		;
+
+stmt_list	: statement				{ statement($1); }
+		| stmt_list ';' statement		{ statement($3); }
+		;
+
+statement	: var_decl				{ $$ = NULL; }
+		| expr					{ $$ = $1; }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+var_decl	: id_list ':' type_decl			{ declare_type($1, $3); }
+		;
+
+type_decl	: KW_INTEGER				{ $$ = basic_type(KW_INTEGER); }
+		| '{' KW_INTEGER '}'			{ $$ = list_type(KW_INTEGER); }
+		| KW_STRING				{ $$ = basic_type(KW_STRING); }
+		| '{' KW_STRING '}'			{ $$ = list_type(KW_STRING); }
+		| KW_FLOAT				{ $$ = basic_type(KW_FLOAT); }
+		| '{' KW_FLOAT '}'			{ $$ = list_type(KW_FLOAT); }
+		| KW_BOOLEAN				{ $$ = basic_type(KW_BOOLEAN); }
+		| '{' KW_BOOLEAN '}'			{ $$ = list_type(KW_BOOLEAN); }
+		| IDENTIFIER				{ $$ = complex_type($1); }
+		| '{' IDENTIFIER '}'			{ $$ = complex_list_type($2); }
+		;
+
+expr		: FOR ALL for_idlist IN for_expr	{ $$ = expr_iterator(E_FORALL, $3, $5); }
+				 expr			%prec FOR
+							{ $$ = expr_for(E_FORALL, $<expr>6, $7); }
+
+		| FOR SOME for_idlist IN for_expr	{ $$ = expr_iterator(E_FORSOME, $3, $5); }
+				expr			%prec FOR
+							{ $$ = expr_for(E_FORSOME, $<expr>6, $7); }
+
+		| FOR for_idlist IN for_expr
+							{ $$ = expr_iterator(E_COMPUTE, $2, $4); }
+			COMPUTE group_expr where_clause		%prec COMPUTE
+							{ $$ = expr_compute($7, $<expr>5, $8); }
+
+		| IF expr THEN expr ELSE expr		%prec IF
+							{ $$ = expr_ifelse($2, $4, $6); }
+
+		| IF expr THEN expr	%prec IF	{ $$ = expr_if($2, $4); }
+	
+		| BEGIN block END	%prec FOR	{ $$ = expr_block($2); }
+
+		| expr OR expr				{ $$ = expr_logical(E_OR, $1, $3); }
+		| expr AND expr				{ $$ = expr_logical(E_AND, $1, $3); }
+		| expr IN expr				{ $$ = expr_in(E_IN, $1, $3); }
+		| expr BETWEEN expr			{ $$ = expr_between(E_BETWEEN, $1, $3); }
+		| expr NOT IN expr	%prec IN	{ $$ = expr_in(E_NIN, $1, $4); }
+		| expr NOT BETWEEN expr	%prec BETWEEN	{ $$ = expr_between(E_NBETWEEN, $1, $4); }
+		| expr LIKE expr			{ $$ = expr_like(E_LIKE, $1, $3); }
+		| expr NOT LIKE expr %prec LIKE		{ $$ = expr_like(E_NLIKE, $1, $4); }
+		| expr '=' expr				{ $$ = expr_equality(E_EQ, $1, $3); }
+		| expr NE expr				{ $$ = expr_equality(E_NE, $1, $3); }
+		| expr '<' expr				{ $$ = expr_relational(E_LT, $1, $3); }
+		| expr LE expr				{ $$ = expr_relational(E_LE, $1, $3); }
+		| expr '>' expr				{ $$ = expr_relational(E_GT, $1, $3); }
+		| expr GE expr				{ $$ = expr_relational(E_GE, $1, $3); }
+		| expr '+' expr				{ $$ = expr_add($1, $3); }
+		| expr '-' expr				{ $$ = expr_arithmetic(E_SUB, $1, $3); }
+		| expr '*' expr				{ $$ = expr_arithmetic(E_MUL, $1, $3); }
+		| expr '/' expr				{ $$ = expr_arithmetic(E_DIV, $1, $3); }
+		| expr '%' expr				{ $$ = expr_arithmetic(E_MOD, $1, $3); }
+		| NOT expr				{ $$ = expr_logical(E_NOT, NULL, $2); }
+		| '-' expr	%prec OLD		{ $$ = expr_arithmetic(E_NEG, NULL, $2); }
+		| factor				{ $$ = $1; }
+		;
+
+for_expr	: variable				{ $$ = $1; }
+		| list					{ $$ = $1; }
+		;
+
+for_idlist	: id_list				{ $$ = expr_for_idlist($1); }
+		;
+
+where_clause	: WHERE expr				{ $$ = $2; }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+group_expr	: grpfunc				{ $$ = expr_grpfunc($1, NULL); }
+		| grpfunc '(' expr ')'			{ $$ = expr_grpfunc($1, $3); }
+		;
+
+group_expr_sa	: grpfunc '(' expr ')'			{ $$ = expr_grpfunc_sa($1, $3); }
+		;
+
+grpfunc		: COUNT					{ $$ = E_COUNT; }
+		| SUM					{ $$ = E_SUM; }
+		| MIN					{ $$ = E_MIN; }
+		| MAX					{ $$ = E_MAX; }
+		;
+
+factor		: '(' expr ')'				{ $$ = $2; }
+		| IDENTIFIER arg_list			{ $$ = expr_call($1,$2); }
+		| IDENTIFIER ASSIGN_OP expr		{ $$ = expr_assign($1, $3); }
+		| group_expr_sa				{ $$ = $1; }
+		| INTEGER				{ $$ = expr_integer($1); }
+		| FLOAT					{ $$ = expr_float($1); }
+		| STRING				{ $$ = expr_string($1); }
+		| BOOLEAN				{ $$ = expr_boolean($1); }
+		| KW_NULL				{ $$ = expr_null(); }
+		| variable				{ $$ = $1; }
+		| OLD variable				{ $$ = expr_old($2); }
+		| ROWNUM '(' expr ')'			{ $$ = expr_rownum($3); }
+		| list					{ $$ = $1; }
+		;
+
+variable	: IDENTIFIER opt_substr			{ $$ = expr_variable($1, $2); }
+		| IDENTIFIER '[' index_list ']'		{ $$ = expr_indexed_table($1, $3); }
+		| IDENTIFIER '.' IDENTIFIER opt_substr	{ $$ = expr_tablefield($1, $3, $4); }
+		| IDENTIFIER '[' index_list ']' '.' IDENTIFIER opt_substr
+							{ $$ = expr_indexed_tablefield($1, $3, $6, $7); }
+		;
+
+opt_substr	: '[' expr ':' expr ']'			{ $$ = expr_substr($2, $4); }
+		| /* empty */				{ $$ = NULL; }
+		;
+
+index_list	: index_expr				{ $$ = expr_args(NULL, $1); }
+		| index_list ',' index_expr		{ $$ = expr_args($1, $3); }
+		;
+
+index_expr	: expr					{ $$ = $1; }
+		| '*'					{ $$ = expr_null(); }
+		;
+
+list		: '{' list_items '}'			{ $$ = expr_list($2); }
+		| '{' '}'				{ $$ = expr_list(NULL); }
+		;
+
+list_items	: expr					{ $$ = expr_args(NULL, $1); }
+		| list_items ',' expr			{ $$ = expr_args($1, $3); }
+		;
+
+arg_list	: '(' args ')'				{ $$ = $2; }
+		;
+
+args		: expr					{ $$ = expr_args(NULL, $1); }
+		| args ',' expr				{ $$ = expr_args($1, $3); }
+		;
+
+block		: block_stmt				{ $$ = expr_args(NULL, $1); }
+		| block ';' block_stmt			{ $$ = expr_args($1, $3); }
+		;
+
+block_stmt	: expr					{ $$ = $1; }
+		| /* empty */				{ $$ = NULL; }
+		;
+%%
+
+
+
+	########################################
+	##### bre_par.c                    #####
+	########################################
+/***********************************************************************
+ * BRE Parse Tree Related Routines
+ *
+ * 'EXPR' DATASTRUCTURE:
+ *	This structure is used to construct parse tree's for
+ *	an entire expression.
+ *
+ *	Example:	foo + 12.3 >= 3000 and mystring = "hello"
+ *
+ *			+---------------+
+ *			|     AND	|
+ *			+--+---------+--+
+ *			   |         |
+ *		     +-----+         +------------+
+ *		     |			          |
+ *		     V                            V
+ *		+---------------+	    +---------------+
+ *		|      >=	|	    |      =        |
+ *		+--+---------+--+	    +--+---------+--+
+ *		   |	     |		       |	 |
+ *	+----------+	     |		   +---+	 |
+ *	|		     |		   |		 |
+ *	V		     V		   V		 V
+ * +---------+		+---------+	+-----------+	+---------+
+ * |    +    |		|  3000   |	|'mystring' |	| "hello" |
+ * +-+-----+-+		+---------+	+-----------+	+---------+
+ *   |     |
+ *   V     V
+ * 'foo'  12.3
+ *
+ * Each EXPR node in the tree stores several bits of information:
+ *	op	=	The kind of node this is, ie. E_ADD, E_EQ, E_INTEGER, ...
+ *
+ *	type	=	What data type this tree evaluates to.
+ *
+ *	constant =	This flag is true if the expression consists of all
+ *			constant data (ie. "12+4*100")
+ *
+ *	symbol	=	Some expression nodes need a pointer to a symbol. Such
+ *			as variables, function calls, etc..
+ *
+ *	value	=	Literal values like a string, or integer would store it
+ *			in 'value'.
+ *
+ *	left	=	The left-side of the expression
+ *	right	=	The right-side of the expression
+ *
+ * PARSE TREE BUILDING ALGORITHM:
+ *	The yacc parser drives the action of building parse trees for
+ *	expressions. Yacc is a bottom-up style parser, so that the tokens
+ *	are first reduced into expression parse tree's. INTEGER's, FLOAT's
+ *	and IDENTIFIERS will form the leaves of the parse tree.
+ *
+ *	Each grammar rule returns a parse tree, and parse tree's get
+ *	joined together by rules such as:
+ *
+ *		expr	:  expr '+' expr
+ *
+ *	Building the parse tree for this is simply a matter of allocating
+ *	a new EXPR node and attaching the left and right pointers to
+ *	the sub-tree's.
+ *
+ *	If that were all we had to do, this source file would not be as
+ *	large as it is.
+ *
+ * LANGUAGE SEMANTICS:
+ *	As the parse tree is being constructed, we perform all SEMANTIC
+ *	checks here. This means that all types have to be validated,
+ *	the number of parameters used in calling a function, etc...
+ *
+ *	Throughout this source file, anytime a function performs a
+ *	language check, I note what that check is under the
+ *	comment 'LANGUAGE SEMANTICS'
+ */
+
+
+	########################################
+	##### bre_gen.c                    #####
+	########################################
+/***********************************************************************
+ * BRE Byte-Code Generation routines
+ *
+ * This file contains the routines that traverse the parse tree, and
+ * generate the byte codes.
+ *
+ *	Example:	foo + 12.3 >= 3000 and mystring = "hello"
+ *
+ *			+---------------+
+ *			|     AND	|
+ *			+--+---------+--+
+ *			   |         |
+ *		     +-----+         +------------+
+ *		     |			          |
+ *		     V                            V
+ *		+---------------+	    +---------------+
+ *		|      >=	|	    |      =        |
+ *		+--+---------+--+	    +--+---------+--+
+ *		   |	     |		       |	 |
+ *	+----------+	     |		   +---+	 |
+ *	|		     |		   |		 |
+ *	V		     V		   V		 V
+ * +---------+		+---------+	+-----------+	+---------+
+ * |    +    |		|  3000   |	|'mystring' |	| "hello" |
+ * +-+-----+-+		+---------+	+-----------+	+---------+
+ *   |     |
+ *   V     V
+ * 'foo'  12.3
+ *
+ * To generate code for this parse tree, we enter into a recursive
+ * algorithm that starts at the leaves of the tree and works its
+ * way back up.
+ *
+ * The byte code for this expression would look something like:
+ *
+ *	OP_GETFP	'foo'		; Fetch foo and place value on stack.
+ *	OP_PUSH_F	12.3		; Push '12.3' on the stack.
+ *	OP_ADD_F			; add operator
+ *	OP_PUSH_I	3000		; push '3000' on stack.
+ *	OP_CONV_IF			; convert integer to float.
+ *	OP_CMP_F			; comare two floats.
+ *	OP_GE				; greater than or equal?
+ *	...
+ *
+ */
+
+/*----------------------------------------------------------------------
+ * Byte-code generation routines. The following routines
+ * recursively traverse the parser tree and generate
+ * byte-code.
+ *
+ *	gencode()				<- top-level function
+ *	gencode_relational()
+ *	gencode_equality()
+ *	gencode_arithmetic()
+ *	gencode_add_list()
+ *	gencode_logical()
+ *	gencode_if()
+ *	gencode_ifelse()
+ *	gencode_in()
+ *	gencode_between()
+ *	gencode_block()
+ *	gencode_function_args()
+ *	gencode_external_args()
+ *	gencode_call()
+ *	gencode_assignment()
+ *	gencode_null()
+ *	gencode_pop()
+ *	gencode_variable()
+ *	gencode_bre_datum()
+ *	gencode_list()
+ *	gencode_substr()
+ *	gencode_sublst()
+ *	gencode_constant()
+ *	gencode_error_clause()
+ *	gencode_count()
+ *	gencode_grpfunc_group()
+ *	gencode_grpfunc()
+ *	gencode_dot()
+ *	gencode_lookup_index()
+ *	gencode_for_list()
+ *	gencode_for_string()
+ *	gencode_for_table()
+ *	gencode_for_group()
+ *	gencode_for()
+ *	gencode_table_index()
+ *	gencode_list_index()
+ *	gencode_group_name()
+ *	gencode_compute_group()
+ *	gencode_compute()
+ */
+
+
+----------------------------------------------------------------------
+/*----------------------------------------------------------------------
+ *	COMPILE	ROUTINE			EXTRACT ROUTINE
+ *	------------------------	--------------------
+ *	prog_new()
+ *	prog_free()
+ *	prog_get_lc()
+ *	prog_set_lc()
+ *	prog_compile_opcode()		prog_get_opcode()
+ *	prog_compile_byte()		prog_get_byte()
+ *	prog_compile_short()		prog_get_short()
+ *	prog_compile_long()		prog_get_long()
+ *	prog_compile_double()		prog_get_double()
+ *	prog_compile_string()		prog_get_string()
+ *	prog_compile_datum()		prog_get_datum()
+ *	prog_compile_voidptr()		prog_get_voidptr()
+ *	prog_encode()
+ *	prog_decode()
+ *	prog_patch_instruction()
+ *
+ * The COMPILE routines will insert a new data item into the
+ * program and position the internal location counter 'lc' to
+ * the next available spot. The EXTRACT routines do the opposite.
+ * They fetch the next data item out of the program and position
+ * the internal location counter 'lc' to the next data item.
+ *
+ */
+
+/*----------------------------------------------------------------------
+ * Execution-time memory manager
+ *
+ *	mem_reset()
+ *		- Resets all of the memory pool pointers. Making
+ *		  all memory available.
+ *
+ *	ptr = mem_alloc(n)
+ *		- Allocates n bytes of storage from the memory pool
+ *
+ *	ptr = mem_strdup(str)
+ *		- Duplicates a string. Memory is obtained from the
+ *		  memory pool.
+ *
+ *	ptr = mem_mklist(n)
+ *		- Returns storage for 'n' list items.
+ *
+ *	mem_remove_all()
+ *		- Removes all of the memory pool.
+ *
+ * These routines simplify the execution of the byte codes
+ * because none of the instruction need to care about
+ * free-ing memory.
+ *
+ * The byte code machie is always pushing and poping objects
+ * onto the stack. When new strings and lists are created,
+ * the mem_XXXXXXX() routines are used.
+ *
+ */
+
+/*----------------------------------------------------------------------
+ * Instruction functions. The following functions implement
+ * the more complex byte code instructions: 
+ *
+ *	op_cmp_f()
+ *	op_cmp_s()
+ *	op_isnull_s()
+ *	op_add_s()
+ *	op_prepend()
+ *	op_append()
+ *	op_substr()
+ *	op_sublst()
+ *	op_in_il()
+ *	op_in_fl()
+ *	op_in_sl()
+ *	op_in_ss()
+ *	op_between_i()
+ *	op_between_f()
+ *	op_between_s()
+ *	op_like()
+ *	op_ext_func()
+ *	op_ext_lookup()
+ *	op_fetch_list_i()
+ *	op_fetch_list_f()
+ *	op_fetch_list_s()
+ *	op_fetch_char()
+ *	op_fetch_field()
+ *	op_count_tr()
+ *	op_conv_bs()
+ *	op_conv_is()
+ *	op_conv_fs()
+ *	op_error()
+ *	op_min_i()
+ *	op_min_f()
+ *	op_min_s()
+ *	op_max_i()
+ *	op_max_f()
+ *	op_max_s()
+ *	op_set_row_verify()
+ */
+
+	########################################
+	##### EXAMPLES                     #####
+	########################################
+----------------------------------------------------------------------
+function is_alpha(str) is
+	str: string;
+	for all c in str
+		c in "abcdefghijklmnopqrstuvwxyz"
+			or
+		c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+00000: OP_ENTRY        S0=1      ; ----- function or constant -----
+00004: OP_GETFP        S0=-2 
+00008: OP_PUSH_I       L0=0 
+00016: OP_GETSP        S0=-2 
+00020: OP_COUNT_S      
+00021: OP_GETSP        S0=-2 
+00024: OP_SUB_I        
+00025: OP_BRANCH_ZERO  B0=1 L0=152 
+00032: OP_GETSP        S0=-2 
+00036: OP_GETSP        S0=-2 
+00040: OP_FETCH_CHAR   
+00041: OP_ASSIGN       B0=1 S0=1 
+00046: OP_INCSP        S0=-1 
+00050: OP_GETFP        S0=1 
+00054: OP_PUSH_S       S0=26 STR0="abcdefghijklmnopqrstuvwxyz" 
+00085: OP_IN_SS        
+00086: OP_BRANCH_TRUE  B0=0 L0=128 
+00092: OP_POP          
+00093: OP_GETFP        S0=1 
+00096: OP_PUSH_S       S0=26 STR0="ABCDEFGHIJKLMNOPQRSTUVWXYZ" 
+00127: OP_IN_SS        
+00128: OP_BRANCH_TRUE  B0=1 L0=16 
+00136: OP_POP          
+00137: OP_POP          
+00138: OP_PUSH_I       L0=0 
+00144: OP_BRANCH       L0=160 
+00152: OP_POP          
+00153: OP_POP          
+00154: OP_PUSH_I       L0=1 
+00160: OP_RETURN       S0=1 
+
+----------------------------------------------------------------------
+rule ex1 is
+	sum(ORDER_LINE_ITEMS.DLR-LINE-TOTAL) = ORDER_HEADER.DLR-ORDER-TOTAL
+
+00164: OP_ENTRY        S0=0      ; ----- RULE: ex1 (file: x.brl) -----
+00168: OP_PUSH_TR      L0=0 PTR0=4001a228      ; ORDER_LINE_ITEMS[0]
+00180: OP_PUSH_I       L0=0 
+00188: OP_PUSH_F       D0=0.0000 
+00200: OP_GETSP        S0=-3 
+00204: OP_COUNT_TR     
+00205: OP_GETSP        S0=-3 
+00208: OP_SUB_I        
+00209: OP_BRANCH_ZERO  B0=1 L0=256 
+00216: OP_GETSP        S0=-3 
+00220: OP_GETSP        S0=-3 
+00224: OP_SET_ROW      
+00225: OP_FETCH_FIELD  PTR0=4001a2e0 PTR1=400070c2 B0=1 B1=70      ; ORDER_LINE_ITEMS.DLR-LINE-TOTAL
+00238: OP_GETSP        S0=-2 
+00242: OP_ADD_F        
+00243: OP_PUTSP        S0=-2 
+00246: OP_INCSP        S0=-2 
+00250: OP_BRANCH       L0=200 
+00256: OP_PUTSP        S0=-3 
+00260: OP_POP          
+00261: OP_PUSH_TR      L0=0 PTR0=400101d8      ; ORDER_HEADER[0]
+00272: OP_FETCH_FIELD  PTR0=400104b0 PTR1=400070c2 B0=1 B1=70      ; ORDER_HEADER.DLR-ORDER-TOTAL
+00286: OP_CMP_F        
+00287: OP_EQ           
+00288: OP_CHECK_RULE   L0=308 
+00296: OP_MKLIST       S0=0 
+00300: OP_ERROR        B0=2 S0=1 STR0="ex1" 
+00308: OP_END_RULE     S0=0 
+
+----------------------------------------------------------------------
+rule ex2 using ORDER_LINE_ITEMS is
+	ENTRY-KEY[0:1] in {" ", "#", "M", "*", "R", "S", "W"}
+
+00312: OP_ENTRY        S0=0      ; ----- RULE: ex2 using ORDER_LINE_ITEMS (file: x.brl) -----
+00316: OP_GETFP        S0=-2 
+00320: OP_FETCH_FIELD  PTR0=4001bd20 PTR1=400070c2 B0=1 B1=83      ; ORDER_LINE_ITEMS.ENTRY-KEY
+00334: OP_PUSH_I       L0=0 
+00340: OP_PUSH_I       L0=1 
+00348: OP_SUBSTR       
+00349: OP_PUSH_L       [datum] B0=83      ; { " ","#","M","*","R","S","W" }
+00361: OP_IN_SL        
+00362: OP_CHECK_RULE   L0=380 
+00368: OP_MKLIST       S0=0 
+00372: OP_ERROR        B0=2 S0=1 STR0="ex2" 
+00380: OP_END_RULE     S0=0 
+
+----------------------------------------------------------------------
+rule ex3 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY in {" ","M","#"} then
+		DIS-DISC between {0, 100}
+
+00384: OP_ENTRY        S0=0      ; ----- RULE: ex3 using ORDER_LINE_ITEMS (file: x.brl) -----
+00388: OP_GETFP        S0=-2 
+00392: OP_FETCH_FIELD  PTR0=4001bd20 PTR1=400070c2 B0=1 B1=83      ; ORDER_LINE_ITEMS.ENTRY-KEY
+00406: OP_PUSH_L       [datum] B0=83      ; { " ","M","#" }
+00417: OP_IN_SL        
+00418: OP_NOT          
+00419: OP_BRANCH_TRUE  B0=0 L0=458 
+00428: OP_POP          
+00429: OP_GETFP        S0=-2 
+00432: OP_FETCH_FIELD  PTR0=4001a280 PTR1=400070c2 B0=1 B1=70      ; ORDER_LINE_ITEMS.DIS-DISC
+00446: OP_CONV_FI      
+00447: OP_PUSH_L       [datum] B0=73      ; { 0,100 }
+00457: OP_BETWEEN_I    
+00458: OP_CHECK_RULE   L0=476 
+00464: OP_MKLIST       S0=0 
+00468: OP_ERROR        B0=2 S0=1 STR0="ex3" 
+00476: OP_END_RULE     S0=0 
+
+----------------------------------------------------------------------
+rule ex4 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY in {" ","M","#"} then
+		for all ch in QA-FLG[0:2]
+			ch in {"0","1","2","3","4","5","6","7","8","9"}
+
+00480: OP_ENTRY        S0=1      ; ----- RULE: ex4 using ORDER_LINE_ITEMS (file: x.brl) -----
+00484: OP_GETFP        S0=-2 
+00488: OP_FETCH_FIELD  PTR0=4001bd20 PTR1=400070c2 B0=1 B1=83      ; ORDER_LINE_ITEMS.ENTRY-KEY
+00502: OP_PUSH_L       [datum] B0=83      ; { " ","M","#" }
+00513: OP_IN_SL        
+00514: OP_NOT          
+00515: OP_BRANCH_TRUE  B0=0 L0=644 
+00524: OP_POP          
+00525: OP_GETFP        S0=-2 
+00528: OP_FETCH_FIELD  PTR0=4001d2c8 PTR1=400070c2 B0=1 B1=83      ; ORDER_LINE_ITEMS.QA-FLG
+00542: OP_PUSH_I       L0=0 
+00548: OP_PUSH_I       L0=2 
+00556: OP_SUBSTR       
+00557: OP_PUSH_I       L0=0 
+00564: OP_GETSP        S0=-2 
+00568: OP_COUNT_S      
+00569: OP_GETSP        S0=-2 
+00572: OP_SUB_I        
+00573: OP_BRANCH_ZERO  B0=1 L0=636 
+00580: OP_GETSP        S0=-2 
+00584: OP_GETSP        S0=-2 
+00588: OP_FETCH_CHAR   
+00589: OP_ASSIGN       B0=1 S0=1 
+00594: OP_INCSP        S0=-1 
+00598: OP_GETFP        S0=1 
+00602: OP_PUSH_L       [datum] B0=83      ; { "0","1","2","3","4","5","6","7","8","9" }
+00613: OP_IN_SL        
+00614: OP_BRANCH_TRUE  B0=1 L0=564 
+00620: OP_POP          
+00621: OP_POP          
+00622: OP_PUSH_I       L0=0 
+00628: OP_BRANCH       L0=644 
+00636: OP_POP          
+00637: OP_POP          
+00638: OP_PUSH_I       L0=1 
+00644: OP_CHECK_RULE   L0=664 
+00652: OP_MKLIST       S0=0 
+00656: OP_ERROR        B0=2 S0=1 STR0="ex4" 
+00664: OP_END_RULE     S0=1 
+

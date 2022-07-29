@@ -1,0 +1,1587 @@
+1/19/98
+
+BRE LANGUAGE SPECIFICATION
+--------------------------
+
+1.0 INTRODUCTION
+----------------
+The business rule engine language (BRE) allows for the specification
+of rules that check the validity of an order.
+
+A rule file is a plain ASCII formatted file that consists of a list
+of rules. Mutliple rules can be parsed by the application at
+start up time.
+
+A rule is the statement of a business requirement that is either TRUE
+or FALSE for a given table row or rows.
+
+2.0 LEXICAL CONVENTIONS
+-----------------------
+2.1 Free Format Input
+Input is broken into tokens. All white space and line breaks
+are ignored from the input.
+
+2.2 Comments
+A comment begins with the characters '--' and continues to
+the end of the line. Eg.
+
+	-- This is rule 123.
+	rule 123 using EMPLOYEE is
+		WAGE-CODE[0:2] = "ZY"		-- Check if wage-code[0:2] = 'ZY'
+	fail with: WAGE-CODE[0:2]
+
+2.3 String Literals
+A string literal consists of characters surrounded by double quotes, as
+in:
+	"This is a string, okay?"
+
+Most printable characters can be placed inside the quotes. Strings
+cannot span multiple lines.
+
+2.4 Integers and Floating Point Literals
+A number is simply a series of digits [0123456789]
+with an optional '.' (decimal point).
+
+2.5 Identifiers
+Identifiers consists of sequences of characters that begins with a letter,
+and subsequence characters can include letters, digits, the underscore '_'
+and the dash '-' character. Since '-' is also an operator, when the subtraction
+operator is desired, make sure to surround it with spaces.
+
+Case distinctions are ignored for identifiers that represent tables, fields, 
+functions, constants, and other user defined names. However, identifiers
+that represent keywords must match as lowercase.
+
+	ORDER_LINE_ITEMS	is the same as		Order_Line_Items
+	Order_header		is the same as		ORDER_header
+	FOR			is the same as		For
+	for			is NOT the same as	FOR
+	using			is NOT the same as	USING
+
+2.6 Keywords
+The following identifiers are reserved by the BRE language.
+These keywords must be represented as lower case. The means
+that you could have a table named 'COMPUTE' for example.
+
+	"all",		"and",		"begin",	"between",
+	"boolean",	"compute",	"constant",	"count",
+	"else",		"end",		"external",	"false",
+	"fail",		"float",	"for",		"function",
+	"if",		"in",		"integer",	"is",
+	"lookup",	"max",		"min",		"not",
+	"null",		"old",		"or",		"rule",
+	"some",		"string",	"sum",		"then",
+	"true",		"using",	"warn",		"where",
+	"with",		"rownum",	"like",		"group"
+
+2.7 Operators and Special Characters
+	--	comment
+	<	Less than
+	<=	Less than or equal to
+	=	equal to
+	<>	not equal to
+	>	greater than
+	>=	greater than or equal to
+	:	Used in error clause, and variable declarations
+	:=	assignment
+	-	subtraction
+	+	addition operator (or string concatenation)
+	/	division
+	*	multiplication operator
+	%	modulos operator
+	.	table field accessor
+	{}	list creation
+	()	expression grouping and function arguments
+	[]	table indexing operator
+	;	expression separator
+	,	separator in lists, and function arguments.
+	"	string creation
+
+3.0 LANGUAGE DETAILS
+--------------------
+A rule file consists of one or more rules, functions, and constants.
+The order of rules, functions and constants in a rule file does not matter,
+however a function or constant must be declared prior to its use.
+
+3.1 RULES
+	rule RULE-ID using SOME-TABLE-NAME is
+		<rule body>
+	fail with: expr, expr
+
+A rule begins with the 'rule' keyword followed by the rule identifier.
+A rule identifier must be a unique number (eg. '123') or
+identifier (eg. 'foo123'). The <rule body> consists of one or more
+expressions (must be separated by a semi-colon ';'). The last expression
+in <rule body> must evaluate to a boolean type.
+
+3.1.1 SEMI-COLON
+The semi-colon ';' is used to separate statements inside the rule body.
+The last statement in the body of a rule may or may not have a semi-colon.
+For example,
+	rule xxxx is
+		S1 ; S2 ; S3		-- No semi-colon 
+
+	rule xxxx is
+		S1 ; S2 ; S3 ;		-- Last statement end with a semi-colon.
+
+
+3.1.2 USING CLAUSE
+A rule can include an optional "using TABLE-NAME" clause. For example,
+	rule 100 using ORDER-LINE-ITEMS is
+		<rule body>
+
+The using clause specifies a table name that the rule will be applied to.
+In the above example the using table is 'ORDER-LINE-ITEMS'. When this
+rule gets evaluated, it will be applied to each row of the ORDER-LINE-ITEMS
+table.
+
+The using table also, sets up a name space where identifiers will be matched
+against fields in the using table.
+
+The using clause is optional, and in that case, the rule gets evaluated only once.
+In order to refer to fields, the table name must be specified.
+
+When the using clause is in use for a rule, a special variable 'current_row'
+exists, which refers to the current row in the using table.
+
+3.1.3 ERROR CLAUSE
+Each rule can include an optional error clause. This clause specifies a list of
+values to be passed back to the error handler. If the error clause is omitted,
+no values are returned back to the error handler, but a failure (or warning) is
+still passed back to the application, but without any error tokens.
+
+Example 1:
+	rule 100 using is
+		for all x in ORDER_LINE_ITEMS
+			x. ENTRY-KEY in { " ", "#", "M" }
+	warn with: ENTRY-KEY, ITEM-NO, LINE
+
+Example 2:
+	rule 100 using ORDER_LINE_ITEMS is
+		ENTRY-KEY in { " ", "#", "M" }
+	fail with: ENTRY-KEY, ITEM-NO, LINE
+
+The error clause can indicate a warning (example 1) or a failure (example2).
+
+3.2 CONSTANTS
+A constant is an expression that can be referred to by name. Examples of
+constant declarations are:
+
+constant million is 1000000
+constant pi	is 3.14159
+constant digit	is { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" }
+constant yes_no	is { "YE", "NO" }
+constant foobar	is 10*3-(90*87)
+
+To use a constant in a rule, you can simply refer to the name of the
+constant:
+
+	rule r123 using ORDER_LINE_ITEMS is
+		ENTRY-KEY in yes_no
+
+A constant can be any expression that is composed entirely of only constants
+and literals.
+
+3.3 FUNCTIONS
+In addition to rules, the BRE language allows functions to be defined.
+Commonly used operations can be placed in a function so that they can
+easily be called from many places. Functions are callable from within rules
+or other functions. A new function is created using the following syntax:
+
+	function count_spaces(str) is
+		str: string;
+		for ch in str compute count
+		where
+			ch = " ";
+
+This function will return the number of spaces in the string 'str'.
+The type of each parameter must be declared at the top of the function.
+Function parameters are passed by value only. There is no way to alter
+a function parameter. A function will return the last expression in the body
+of the function. All functions must return something.
+
+To use the function 'count_spaces', we could do the following:
+
+	rule ex1 using ORDER_HEADER is
+		count_spaces(DESCRIPTION) >= 5
+
+This rule would be true when the DESCRIPTION field has 5 or more spaces
+in it.
+
+The parameter list is optional. A function without arguments is referenced
+by the name only without the parenthesis, for example:
+
+	function hello is
+		{ " ", "#", "M" }
+
+To call this function,
+	rule r123 using ORDER_LINE_ITEMS is
+		ENTRY-KEY in hello
+
+A function without parameters is very similar to a constant.
+
+3.4 LOOKUPS
+Many business rules need to check the contents of a field against
+another database table. These database tables are refered to as
+"lookup tables". A lookup is a database that has key-value pairs that
+can be accessed from within a rule or function. Lookups are added to the
+BRE language by registering them with the BRE library at run-time. The business
+rule file will contain an external declaration for a lookup like,
+
+	external lookup ZIP-CODES[key1, key2].{ZIPCODE, STATE, CITY, COUNTY}
+
+This declares the lookup table 'ZIP-CODES'. For this declaration to work
+'ZIP-CODES' must have been registered by the C program.
+
+To use a lookup table, you can use the following syntax:
+
+	rule r123 is
+		ZIP-CODES["CA", "SUNNYVALE"].ZIPCODE <> "94086"
+
+Sometimes a key field is a "don't care" situation. In this case, use
+the keyword null, or the '*' token. For example,
+
+	rule 123 is
+		ZIP-CODES["CA", *].ZIPCODE <> "94086"
+
+	rule 123 is
+		ZIP-CODES["CA", null].ZIPCODE <> "94086"
+
+The '*' and 'null' tokens will be treated the same way inside of lookup
+tables. If the lookup table does not contain the key, then a NULL lookup record
+is returned.
+
+3.5 EXTERNAL FUNCTIONS
+These are just like lookups in they way they are implemented. To declare
+an external function you would write,
+
+	external function IS_ALL_SPACES(str)
+
+This declares a function 'IS_ALL_SPACES' that can be called later on
+from within a rule. Before this declaration will work, the implementation
+must register a external function with the name 'IS_ALL_SPACES'.
+
+3.6 GROUP
+The following discussion about GROUPS will refer to the following sample
+database table:
+
+				Table Name: ORDER_TABLE
+
+	    ITEM            LN               K-CODE         QUANTITY         AMOUNT
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | ABC		|    1		|		|		|	19.95	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| ABC		|    2		|		|		|	5.85	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | ABC		|    3		|		|		|	2.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| ABC		|    4		|		|		|	3.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | XXX		|    1		|		|		|	34.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | XXX		|    2		|		|		|	99.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | FOO		|    1		|		|		|	100.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| FOO		|    2		|		|		|	150.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | FOO		|    3		|		|		|	160.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par,x-> | CAT		|    1		|		|		|	200.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+	+---------------+---------------+---------------+---------------+---------------+
+par  -> | APPLE		|    1		|		|		|	1999.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    2		|		|		|	2048.00	|
+	+---------------+---------------+---------------+---------------+---------------+
+x    -> | APPLE		|    3		|		|		|	850.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    4		|		|		|	1010.99	|
+	+---------------+---------------+---------------+---------------+---------------+
+	| APPLE		|    5		|		|		|	799.0	|
+	+---------------+---------------+---------------+---------------+---------------+
+
+The table above has been divided into groups based on the field 'ITEM'. The ordering
+is important, as it allows BRE to process each group separately. The variable
+names 'par' and 'x' indicate table row pointer variables that will be setup
+when looping through a table that has been partitioned in this way.
+
+The variable called 'par' will always point to the first record of each group.
+The variable called 'x' will be iteratively set to each record in the group
+(including the first one).
+
+3.6.1. Defining a group
+Before you can loop through tables using the defined partitions, you will need
+to define a group. A group is defined outside of any rule and must be
+defined before it can be used. The name of the group will be used inside of
+the other language constructs (described in parts B, C and D).
+The basic format of a group expression is:
+
+	group <group name> using <table name> is
+		<boolean expression>
+
+The following example defines a group for the ORDER_TABLE show above:
+
+	group ORDER_GROUP using ORDER_TABLE is
+		current_row.ITEM = previous_row.ITEM
+
+This boolean expression describes a relationship between the rows in the table.
+In particular the variable 'current_row' and 'previous_row' can be
+used to define groups based on the current row and the row before it.
+The boolean expression should return FALSE when 'current_row' and
+'previous_row' are straddling a boundary between groups.
+
+
+3.6.2. USING THE GROUP IN FOR ALL/FOR SOME LOOPS
+Example,
+
+	for all par, x in ORDER_GROUP
+		<expression>
+
+The FOR ALL (and FOR SOME) loop can be applied to a group. To
+do this simply use the name of the defined group in place of
+a table name. You must also provide TWO variables instead of 1.
+
+The first variable will be set to the first row of each group
+in the table. The second variable will be set to each row.
+in the table. Whenever a group boundary is reached, the variable
+'par' will be set to the first row of the next group.
+
+The FOR ALL / FOR SOME loops will loop exactly n times. Where
+n is the number of rows in the table.
+
+Semantics of FOR ALL:
+For all groups, all rows in the group must cause <expression> to be TRUE.
+	
+Semantics of FOR SOME:
+For all groups, at least one row must cause <expression> to
+return TRUE.
+
+3.6.3. USING THE GROUP IN COMPUTE LOOPS
+Example,
+	list: {float};
+
+	list := (for par, x in ORDER_GROUP compute sum(AMOUNT))
+
+'list' will be set to: { 30.00, 134.98, 410.0, 200.0, 6707.98 }
+
+Normal compute loops return a single value (an integer, string or float).
+However, when a GROUP name is being used, the return is a LIST of values.
+One value per group.
+
+For example, the # of groups show above is 5. Therefore all compute loops
+will return lists with 5 elements.
+
+	count_list: {integer};
+	count_list := (for par, x in ORDER_GROUP compute count)
+
+'count_list' will be: {4, 2, 3, 1, 5};
+
+3.6.4. USING THE GROUP IN GROUP FUNCTIONS (SUCH AS MIN/MAX AND SUM)
+Example,
+	list1, list2, list3: {float};
+
+	list1 := max(ORDER_GROUP.AMOUNT);
+	list2 := min(ORDER_GROUP.AMOUNT);
+	list3 := sum(ORDER_GROUP.AMOUNT);
+
+The values for list1, list2, and list3 will be:
+list1 -> { 19.95,  99.99,  160.0,  200.0,  2048.00 }
+list2 -> {  2.00,  34.99,  100.0,  200.0,   799.00 }
+list3 -> { 30.00, 134.98,  410.0,  200.0,  6707.98 }
+
+4.0 EXPRESSIONS
+---------------
+Expression can appear in the body of rules, functions or constants.
+
+4.1 DATA TYPES
+The BRE language supports the following basic data types:
+	TYPE		EXAMPLES		DECLARING
+	----------	----------------	-------------------
+	Boolean		true, false		a,b,c: boolean
+	Integer		1, 200, 939		d,e,f: integer
+	Float		1.2, 3.14, 0.002	g,h,i: float
+	String		"aaaa", "hello"		j,k,l: string
+
+A string can be any length within the BRE language. Most operators
+allow Integer's and Float's to be freely intermixed.
+
+4.1.1 Lists
+Only lists of the basic types are supported. A list is constructed using the curly
+braces to contain the values { }. For example,
+
+	{1, 2, 3}
+	{true, false}
+	{"hello", "world", "blue"}
+
+The following are some lists declarations:
+
+	a,b,c: {integer};
+	d,e,f: {boolean};
+	g,h,i: {string};
+
+4.1.2 Table Row Pointer type
+A table row pointer is a data type that "points" to a certain
+row within a table. You can declare variables of this type
+by using the name of the table as the type name in the declaration.
+For example,
+	oh: ORDER_HEADER;
+	oli: ORDER_LINE_ITEMS;
+
+This rule declares 2 table row pointers:
+
+	rule r123 is
+		a, b: ORDER_LINE_ITEMS;
+		a := ORDER_LINE_ITEMS[0];
+		b := ORDER_LINE_ITEMS[1];
+
+		a.ENTRY-KEY in { " ", "#", "M" }
+		and b.ENTRY-KEY in { "0" }
+
+This rule uses the variables 'a' and 'b' that are declared of type 'ORDER_LINE_ITEMS'.
+The rule assigns 'a' to the 1st order line item, and 'b' is set to the 2nd
+line item. The expression then performs a check using both variables.
+
+4.1.3 Lookup Record type
+A lookup record is a variable that can store the results of a table look up.
+You can declare lookup record variables by using the name of the lookup table as
+the type name. For example,
+
+	t22: T0000022;
+	a,b: ZIP-CODES;
+
+Here is a rule that uses lookup record variables:
+
+	rule r123 is
+		a, b: ZIP-CODES;
+		a := ZIP-CODE["CA", "SAN JOSE"];
+		b := ZIP-CODE["CA", "SAN FRANCISCO"];
+
+		a.ZIPCODE = "94088" and a.COUNTY = "CRAPPOLLA"
+		and b.ZIPCODE = "939393" and b.COUNTY = "OAKLAND"
+
+The variables 'a' and 'b' are set to the results of the table lookup.
+
+4.1.4 Null
+All data types can be represented by a null value. A null value
+can be entered into the BRE language by using the keyword 'null'.
+The context determines the type of the null keyword. For example,
+	"foobar" <> null		- 'null' represents a null string
+	100200 = null			- 'null' means a null integer.
+
+A null value can also occur when a lookup function does not match
+any row. Or a variable is assigned null.
+
+When a null value is used in an operation, the result is another
+null value.
+
+A string is considered equal to null if it is empty, or contains
+all spaces.
+
+4.1.5 Examples
+
+constant SEPERATOR is ":"
+--
+-- This function concatenates all the strings contained in the
+-- list 'str_list'. The parameter 'str_list' is declared, and a new
+-- variable 'newstr' is defined.
+--
+function join_strings(str_list) is
+	str_list: {string};
+	newstr: string;
+
+	newstr := "";
+	for all f in str_list
+	begin
+		newstr := newstr + f;
+		true
+	end;
+	newstr
+
+--
+-- This rule declares a string 'x' and calls the function 'join_strings'
+--
+rule 123 using EMPLOYEE is
+	x: string;
+	x := FIRST_NAME + SEPERATOR + LAST_NAME;
+	x = join_strings({FIRST_NAME, SEPERATOR, LAST_NAME})
+
+The rule '123' will evaluate to true because the string 'x' is equal
+to what the join_strings() function returns.
+
+4.2 DECLARING VARIABLES AND PARAMETERS
+Both variables and paramters are declared using the following syntax:
+
+	var1, var2, var3, ... : <TYPE>
+
+Where <TYPE> is:
+	BASIC TYPE		LIST OF ...
+	---------------		-------------------
+	boolean			{boolean}
+	integer			{integer}
+	float			{float}
+	string			{string}
+	TABLE-NAME
+	LOOKUP-NAME
+
+A variable/parameter has scope within the rule or function where it is declared.
+A variable or parameter name cannot clash with a table name, constant, rule-id,
+function name or external identifier.
+
+4.3 ARITHMETIC OPERATORS
+The basic mathematical operators are supported in the bre language.
+	expr1 + expr2		- Addition.
+	expr1 - expr2		- Sutraction
+	expr1 * expr2		- Multiplication
+	expr1 / expr2		- Division
+	expr1 % expr2		- Modulos (integer types only)
+	- expr			- Negation
+
+NOTE ABOUT USING '-':
+Because the '-' character is allowed inside of identifiers, if you want
+to use the subtraction operator, make sure it is surrounded by spaces.
+For example,
+	TAX-AMOUNT-million		<- will give an error.
+	TAX-AMOUNT - million		<- will work.
+
+Integer's and Float's can be mixed with these operators. The
+modulos ('%') operator only allows integers.
+
+The '+' operator will work with string as well. In this case, concatenation of
+the two strings is peformed. For example,
+
+	rule r1 is
+		"hello, world" = ("hello, " + "world")
+
+The '+' operator can also be used to add an element to the beginning or end
+of a list. For example,
+
+	rule r1 is
+		lst1, lst2 : {integer};
+
+		lst1 := {1, 2, 3};
+		lst1 := lst1 + 4;
+
+		lst2 := {200, 300, 400};
+		lst2 := 100 + lst2;
+
+After execution of these statements lst1 will be: {1,2,3,4} and lst2
+will be {100,200,300,400}
+
+4.4 RELATIONAL OPERATORS
+Relational operators compare quantities. The following operators are allowed:
+	<		- Less than
+	<=		- Less than or equals
+	>		- Greater than
+	>=		- Greater than or equals
+
+These operators can be used with INTEGER's, FLOAT's or STRING's. When strings
+are used, alphabetical sorting ordering is used.
+
+4.5 EQUALITY OPERATORS
+	=		- Equals
+	<>		- Not equals
+
+These two operators compare two values for equality. 'null' is also allowed to
+be used with this operator. For example,
+
+	rule r123 using ORDER_LINE_ITEMS is
+		if GOOBER-FIELD <> null then
+			FOOBER-FIELD = null
+
+4.5 LOGICAL OPERATORS
+	or		- logical OR operator
+	and		- logical AND operator
+	not		- logical NOT operator
+
+These operations take boolean types and compute the logical OR, AND or NOT.
+(Short-circuit evaluation is used for the OR and AND operators)
+
+4.6 STRING OPERATORS
+	str1 + str2		- String concatenation
+	str[n:m]		- Substring operator
+	str1 IN str2		- Substring checker
+	str1 NOT IN str2	- Substring checker
+	str LIKE pattern	- Perform SQL like comparision
+	str NOT LIKE pattern	- Perform SQL like comparision
+
+You can join to string with the concatenation operator '+' or you can extract
+a substring using the substring operator. When using the substring operator 'n'
+is the starting index (based on 0 being the first character) and 'm' is the number
+of characters in the substing.
+
+Substring operator:
+	str := "hello";
+	str[2:2] = "ll";	-- This is true.
+
+The 'IN' operator can be used to check if the string 'str1' appears in 'str2'. For
+example,
+	rule r123 is
+		"issi" in "mississippi"		-- Does "issi" appear in "mississippi"
+
+The 'LIKE' operator will check a string against a pattern. The pattern can
+Compare the string 'str' to the globbing pattern 'pat'. The
+special characters in pattern follow the SQL specification for
+the LIKE operator:
+
+	'_'	- Matches any character.
+	'%'	- Matches one or more characters.
+
+The LIKE operator in BRE has been extended. The following can also be included
+inside of pattern:
+
+	[set]	- Match any character in set.
+	[^set]	- Match any character NOT in set.
+
+Use the backslash "\" before a character to remove any special meaning it
+might have as a match operator. A set consists of single characters, to represent
+a range of characters use '-'. For example,
+	[0-9]		- Matches all digits.
+	[a-zA-Z]	- Matches all letters.
+
+Examples,
+	"X90" like "X__"				- true
+	"XXX" like "%"					- true
+	"X-DUD-001" like "X-___-%"			- true
+	"X-DUD-001" like "X-DUD-[0-9][0-9][0-9]"	- true
+	"X-DUD-001" not like "X-DUD-[0-9][0-9][0-9]"	- false
+
+4.7 LIST OPERATORS
+	expr IN list
+	expr NOT IN list
+	expr BETWEEN { LOW, HI }
+	expr NOT BETWEEN { LOW, HI }
+	expr[n:m]
+	expr[n]
+
+The basic list operator is 'in'. This operation returns true or false if the expression 'expr'
+appears in the list 'list'. The inverse of this is the 'NOT IN' operator.
+
+Range checking can be accomplished by using the BETWEEN and NOT BETWEEN operators.
+For example,
+	rule r123 is
+		12 between {1, 100}
+
+Strings can be checked using this operator. When strings are used, the alphabetical
+ordering is assumed. This is equivilant to: (12 >= 1 and 12 <= 100)
+
+The sub-list operator uses the same notation as the substring operator, except
+the operand is a list. For example,
+
+	rule r111 is
+		x, y : {string};
+		x := {"a", "b", "c", "d", "e", "f"}
+		y := x[2:3];
+
+These statements will set y to {"c", "d", "e"}. The first element of a list
+is accessed using '0'.
+
+The index operator "expr[n]" will access a data value from the list. The first
+element is refernced using 0. For example,
+
+	rule r222 is
+		rates: {float};
+		rates := {1.2, 2.9, 3.3, 4.4};
+		rates[2] = 3.3;
+
+In this examples rates[2] refers to the elemen "3.3".
+
+4.8 GROUP FUNCTIONS
+Group functions can appear outside of the COMPUTE loops. This sections
+describes the group functions when they are not inside of a compute loop.
+
+	MIN(expr)		- Return minimum value
+	MAX(expr)		- Return maximum value
+	SUM(expr)		- Return summation
+	COUNT(expr)		- Count number of items.
+
+'expr' can be a list of integer's or float's. For example,
+
+	rule r1 is
+			sum({100, 200, 990}) = 100 + 200 + 990
+		and	min({100, 200, 990}) = 100
+		and	max({100, 200, 990}) = 990
+		and	count({100, 200, 990}) = 3
+
+'expr' can be a table/field reference, as in:
+
+	rule r1 is
+			sum(PRODUCTS.PRICE) > 10000
+		or	max(ORDER_LINE_ITEMS.COMMISION) <= 500
+		or	min(ORDER_LINE_ITEMS.MINTAX) > 10
+		and	count(ORDER_HEADER) = 1
+
+When using group functions in this way, all rows from the table are
+used to compute the MIN, MAX or SUM function.
+
+The COUNT function works on the following types:
+	COUNT("hello")		-- String length
+	COUNT({1,2,3,4})	-- List length
+	COUNT(ORDER_X_LINES)	-- # of rows in a table.
+
+4.9 TABLE OPERATORS
+	Given a table, we can index it with an integer argument.
+This yields the row corresponding to the index. For example,
+
+	rule r123 is
+		last : integer;
+
+		last := count(ORDER_LINE_ITEMS)-1;
+
+			ORDER_LINE_ITEMS[0].FOOBAR = "A"
+		and	ORDER_LINE_ITEMS[last].FOOBAR = "Z"
+
+This rule checks that the first and last rows in the order line items
+table as a certain field set to "A" (or "Z").
+
+Given a table row pointer, you can get the logical row number
+with the ROWNUM() operator. (Row numbers start at 0).
+For example,
+
+	rule 123 is
+		tr: ORDER_LINE_ITEMS;
+
+		tr := ORDER_LINE_ITEMS[3];
+		rownum(tr) = 3;
+
+The OLD operator refers to the OLD value of a field. When an order is
+being validated, both the old values and the new values can be referred to.
+For example,
+
+	rule r1111 using ORDER_HEADER
+		if old SC-CODE = "FY" then
+			SC-CODE <> "MX"
+
+Lastly, the '.' operator separates a table name from a field name. When
+the rule has a 'using' clause the DOT operator is implicit when a reference
+is made to the field name. For example,
+
+	Implicit Table Access		|    Explicit Table Access
+        --------------------------------+-------------------------
+					|
+ rule r1 using ORDER_LINE_ITEMS is	| rule r1 is
+   XYCODE in { " ", "#", "M" }		|    ORDER_HEADER.XYCODE in { " ", "#", "M" }
+					|
+
+These two rules are the same, except that the using clause is not present in the
+example on the right. The expression 'ORDER_HEADER.XYCODE' refers to the XYCODE
+of the first row of the ORDER_HEADER table. The equivalancy is as follows:
+
+	ORDER_HEADER.XYCODE	<== ==>		ORDER_HEADER[0].XYCODE
+
+	p := ORDER_HEADER[3];
+	p.XYZ			<== ==>		ORDER_HEADER[3].XYZ
+
+	p := ORDER_HEADER	<== ==>		p := ORDER_HEADER[0];
+
+
+4.10 USING LOOKUP TABLES
+	external lookup ZIP-CODES[key1, key2].{ZIPCODE, STATE, CITY, COUNTY}
+
+Assume a lookup table as declared above. We can use the lookup as in:
+	rule r123 is
+		ZIP-CODES["CA", "SUNNYVALE"].ZIPCODE <> "94086"
+or
+	rule 123 is
+		ZIP-CODES["CA", *].ZIPCODE <> "94086"
+
+The '.' operator separates a lookup table name from a field name.
+
+4.11 EXPRESSION BLOCK
+Sometimes you need to perform more than one statement within
+a loop or if..then statement. The BEGIN ... END block allows
+multiple expressions to be treated as a single expression.
+
+	BEGIN expr1; expr2; expr3; ... exprn END
+
+An expression block is a sequence of expressions, which are executed in
+the order of occurence. The type and value of the block is determined from
+the last expression in the sequence. Each expression in the block must be
+separated by a semi-colon.
+
+
+The following is an example using the expression block:
+
+	rule r11 is
+		cnt, xcnt : integer;
+
+		cnt := 0
+		xcnt := 0
+		for all x in ORDER_LINE_ITEMS
+		begin
+			cnt := cnt + 1;
+
+			if x.ENTRY-KEY = "X" then
+				xcnt := xcnt + 1;
+			false;
+		end
+
+This rule counts the number of ORDER_LINE_ITEM rows, and the number
+whose ENTRY-KEY field is "X".
+
+
+4.12 FOR ALL
+	FOR ALL vars IN table_or_list_expr
+		body
+
+This construct iterates over all items in 'table_or_list_expr' and
+makes sure that the expression 'body' is TRUE for all items.
+(When table_or_list_expr is empty, the FOR ALL loop is always true)
+Examples:
+	rule r1 is
+		for all f, g in {"A", 1,  "B", 2,  "C", 3}
+			f >= "A" and g >= 1
+
+In this example more than one iteration variable is used. This is only
+allowed when a list is being iterated over. Each time through the loop 'f' and
+'g' will be set as follows:
+
+	1st time	f = "A"		g = 1
+	2nd time	f = "B"		g = 2
+	3rd time	f = "C"		g = 3
+
+Another Example,
+	rule r1 is
+		for all f in ORDER_LINE_ITEMS
+			f.KJS-KEY in { "YE", "NO" }
+
+The variable used in the FOR ALL loop does not need to be declared.
+The context will establish the type of the varible. The variable name cannot
+be used in the rest of the rule or function. When the loop exits, the variables
+will be set to the last item in the iteration expression or the first item
+that the body expression evaluated to FALSE.
+
+4.13 FOR SOME
+	FOR SOME vars IN table_or_list_expr
+		body
+
+This construct iterates over all items in 'table_or_list_expr' and
+makes sure that for at least one item, the expression 'body' is TRUE.
+(When table_or_list_expr is empty, the FOR SOME loop is always false)
+
+4.14 COMPUTE LOOP
+	FOR var IN table_or_list_expr COMPUTE group_expr
+	WHERE
+		condition
+
+This loop statement will iterate over all items in <table_or_list_expr>.
+Each time through the loop, it will evaluate the WHERE <condition>
+If the condition is TRUE, then the <group_expr> is computed.
+
+This statement evaluates to the value returned by the COMPUTE expression.
+
+The WHERE clause is optional. When it is omitted, every row is used for
+computing the group function expression.
+
+Example 1:
+rule r123 is
+	(for li in ORDER_LINE_ITEMS compute sum(li.PRICE)
+	where
+		li.TAXABLE = "YE") <= 2000
+
+This rule calculates the sum of all the PRICE fields where the TAXABLE field is set
+to "YE". It checks that this total does not exceed 2000.
+
+Example 2:
+rule r123 is
+	(for li in ORDER_LINE_ITEMS compute max(li.DISCOUNT)
+	where
+		li.SALES-GUY = "Slick Sam") <= 500
+
+This rule checks that Slick Sam's highest discount does not exceed 500.
+
+The group functions available in the COMPUTE loop are:
+	* SUM()		- Adds all the values together.
+	* MAX()		- The maximum value encountered.
+	* MIN()		- The minimum value encountered.
+	* COUNT		- In this context the COUNT function does not take any arguments.
+
+Any expression may appear inside the group functions.
+
+4.15 IF...THEN...ELSE
+	IF expr THEN expr1 ELSE expr2
+
+The IF-THEN statement allows a conditional check to be performed. Most rules
+will involve the IF-THEN construct to check the validity of fields.
+
+Logically, the IF-THEN is the same as:
+
+	IF c THEN x	<==>	(NOT c  OR  x)
+
+The IF-THEN-ELSE is equivilant to:
+
+	IF c THEN x ELSE y	<==>	(c  AND  x)  OR  (NOT c  AND  y)
+
+The expression 'expr1' and 'expr2' do not nessesarily have to be boolean
+expression. For example,
+	rate: float;
+
+	rate := (if TAX-RATE = "HUGE" then
+			55.0
+		else
+			12.9);
+
+Here the variable 'rate' is being conditionally set to a value based
+on the condition 'TAX-RATE = "HUGE". A more common way to write
+this is:
+
+	rate: float;
+
+	if TAX-RATE = "HUGE" then
+		rate := 55.0
+	else
+		rate := 12.9;
+
+As with the AND and OR operators, short-circuit evaluation is performed
+on the IF..THEN..ELSE statement.
+
+5.0 LANGUAGE GRAMMAR
+--------------------
+program		: decl_list
+		;
+
+decl_list	: declaration
+		| decl_list declaration
+		;
+
+declaration	: constant_decl
+		| function_decl
+		| group_decl
+		| external_func
+		| external_lookup
+		| rule_decl
+		;
+
+external_func	: EXTERNAL FUNCTION IDENTIFIER parameters
+		;
+
+external_lookup	: EXTERNAL LOOKUP IDENTIFIER '[' id_list ']' '.' '{' id_list '}'
+		;
+
+constant_decl	: CONSTANT IDENTIFIER IS expr
+		;
+
+function_decl	: FUNCTION IDENTIFIER parameters IS
+				stmt_list
+		;
+
+group_decl	: GROUP IDENTIFIER USING table IS expr
+		;
+
+rule_decl	: RULE rule_id using_clause IS
+				stmt_list error_clause
+		;
+
+parameters	: '(' id_list ')'
+		| /* empty */
+		;
+
+id_list		: IDENTIFIER
+		| id_list ',' IDENTIFIER
+		;
+
+rule_id		: IDENTIFIER
+		| INTEGER
+		;
+
+using_clause	: USING IDENTIFIER
+		| /* empty */
+		;
+
+error_clause	: WARN WITH ':' error_exprs
+		| FAIL WITH ':' error_exprs
+		| /* empty */
+		;
+
+error_exprs	: expr
+		| error_exprs ',' expr
+		;
+
+stmt_list	: statement
+		| stmt_list ';' statement
+		;
+
+statement	: var_decl
+		| assignment
+		| expr
+		| /* empty */
+		;
+
+var_decl	: id_list ':' type_decl
+		;
+
+type_decl	: KW_INTEGER
+		| '{' KW_INTEGER '}'
+		| KW_STRING
+		| '{' KW_STRING '}'
+		| KW_FLOAT
+		| '{' KW_FLOAT '}'
+		| KW_BOOLEAN
+		| '{' KW_BOOLEAN '}'
+		| IDENTIFIER
+		| '{' IDENTIFIER '}'
+		;
+
+assignment	: IDENTIFIER ASSIGN_OP expr
+		;
+
+expr		: FOR ALL for_idlist IN for_expr expr
+		| FOR SOME for_idlist IN for_expr expr
+		| FOR for_idlist IN for_expr COMPUTE group_expr where_clause
+		| IF expr THEN expr ELSE expr
+		| IF expr THEN expr
+		| BEGIN block END
+		| expr OR expr
+		| expr AND expr
+		| expr IN expr
+		| expr BETWEEN expr
+		| expr NOT IN expr
+		| expr NOT BETWEEN expr
+		| expr '=' expr
+		| expr NE expr
+		| expr '<' expr
+		| expr LE expr
+		| expr '>' expr
+		| expr GE expr
+		| expr '+' expr
+		| expr '-' expr
+		| expr '*' expr
+		| expr '/' expr
+		| expr '%' expr
+		| expr LIKE expr
+		| expr NOT LIKE expr
+		| NOT expr
+		| '-' expr
+		| factor
+		;
+
+for_expr	: variable
+		| list
+		;
+
+for_idlist	: id_list
+		;
+
+where_clause	: WHERE expr
+		| /* empty */
+		;
+
+group_expr	: grpfunc
+		| grpfunc '(' expr ')'
+		;
+
+grpfunc		: COUNT
+		| SUM
+		| MIN
+		| MAX
+		;
+
+factor		: '(' expr ')'
+		| IDENTIFIER arg_list
+		| group_expr
+		| INTEGER
+		| FLOAT
+		| STRING
+		| BOOLEAN
+		| KW_NULL
+		| ROWNUM '(' expr ')'
+		| variable
+		| OLD variable
+		| list
+		;
+
+variable	: IDENTIFIER opt_substr
+		| IDENTIFIER '[' index_list ']'
+		| IDENTIFIER '.' IDENTIFIER opt_substr
+		| IDENTIFIER '[' index_list ']' '.' IDENTIFIER opt_substr
+		;
+
+opt_substr	: '[' expr ':' expr ']'
+		| /* empty */
+		;
+
+index_list	: index_expr
+		| index_list ',' index_expr
+		;
+
+index_expr	: expr
+		| '*'
+		;
+
+list		: '{' list_items '}'
+		| '{' '}'
+		;
+
+list_items	: expr
+		| list_items ',' expr
+		;
+
+arg_list	: '(' args ')'
+		;
+
+args		: expr
+		| args ',' expr
+		;
+
+block		: block_stmt
+		| block ';' block_stmt
+		;
+
+block_stmt	: expr
+		| assignment
+		| /* empty */
+		;
+
+
+6.0 LANGUAGE SEMANTICS
+----------------------
+The following items describe constraints on the 
+langauge for mixing data types and other semantic rules.
+
+6.1 Compatible types
+Two types are considered compatible if they are
+exactly the same, or one is a FLOAT and one is an INTEGER.
+
+----------------------------------------------------------------------
+IF e1 THEN e2
+
+1. e1 must be a boolean expression.
+2. e2 must be a boolean expression.
+
+----------------------------------------------------------------------
+IF e1 THEN e2 ELSE e3
+
+1. e1 must be a boolean expression.
+2. e2 and e3 must be boolean expressions.
+
+----------------------------------------------------------------------
+LOGICAL OPERATORS: OR, AND, NOT
+	e1 OP e2
+
+1. operands to these operators must be of type boolean.
+
+----------------------------------------------------------------------
+The IN operator.
+	e1 IN e2
+	e1 NOT IN e2
+
+1. 'e2' must be a list or string.
+2. If e2 is a list, then it must contain
+   objects of type 'e1'
+3. If e2 is a list, then it must be a list of basic types.
+4. If e2 is a string, e1 must be a string. (this becomes a
+	substring checker)
+5. This operator always yeilds a boolean type.
+6. e1 must be a basic type (integer, boolean, float, string, date,time)
+
+----------------------------------------------------------------------
+The BETWEEN operator.
+	e1 BETWEEN e2
+	e1 NOT BETWEEN e2
+
+1. e1 must be a orderable_type (integer,float,string,date,timestamp)
+2. e2 must be a list of a type compatible with e1.
+3. e2 must be a list of length exactly 2.
+
+IMPORTANT:	Check #3 cannot always be done at compile time. A run-time
+		check will silently evaluate to FALSE when the length of
+		the list is not exactly 2.
+----------------------------------------------------------------------
+EQUALITY OPERATORS: = <>
+	e1 OP e2
+
+1. Both operands must be BOOLEAN, INTEGER, FLOAT, STRING, TABLE ROW or TABLE RECORD.
+2. One of the operands is allowed to be 'null'.
+
+----------------------------------------------------------------------
+RELATIONAL OPERATORS: > < >= <=
+	e1 OP e2
+
+1. Both operands must be INTEGER, FLOAT or STRING.
+2. Both operands must be compatible.
+
+----------------------------------------------------------------------
+ADD OPERATOR: +
+	e1 + e2
+
+1. Both operands must be compatible.
+2. Must be a string, integer or float.
+
+----------------------------------------------------------------------
+ARITHMETIC OPERATORS: - * / % unary minus
+	e1 OP e2
+
+1. Both operands must be compatible.
+2. Both operands must be integer or float.
+3. Mod operator is only valid for integer operands.
+
+----------------------------------------------------------------------
+The GROUP FUNCTIONS: SUM, MIN, MAX, COUNT
+	SUM(e1)
+	MIN(e1), MAX(e1), COUNT
+
+1. COUNT can have a single argument, or none.
+2. SUM, MIN, MAX must have exactly 1 argument.
+3. The type of argument for SUM, MIN, MAX must be INTEGER or FLOAT.
+	(or list of INTEGER, list of FLOAT)
+4. If COUNT has an argument, it must be a countable type.
+5. The type returned is equal to the type of the argument, except for
+   COUNT() which always returns an integer.
+6. If COUNT() has no arguments, when it is byte compiled it
+   will return the number of rows in the implicit table.
+
+----------------------------------------------------------------------
+A Function Call:
+	id ( args )
+
+This could be an external function call, or a internally defined function.
+
+1. The symbol 'id' must be an external function, or a internally defined
+   function.
+2. The number of arguments must match that of its definition.
+3. The types of the arguments must be compatible.
+4. The type of this expression is the type the function returns.
+5. A 'null' argument is assumed to be the type of that parameter.
+6. Recursion is not allowed.
+
+----------------------------------------------------------------------
+List
+
+	{ ...items... }
+
+1. A list can only contain BOOLEAN, INTEGER, FLOAT, STRING, DATE
+   or TIMESTAMP types.
+2. A list is allowed to contain a mixture of these data types.
+3. The 'null' keyword cannot be used as one of the elements.
+4. An empty list has an T_UNKNOWN type.
+
+----------------------------------------------------------------------
+Old operator
+	OLD variable
+1. The old operator can only be applied to FIELD references.
+
+----------------------------------------------------------------------
+SUBSTRING SPECIFIER
+
+	e1 [ n : m ]
+
+1. The expression 'e1' must be a string type.
+2. Boh expressions 'n' and 'm' must be of type integer.
+
+----------------------------------------------------------------------
+Variable Reference (with optional substring spec e1)
+	IDENTIFIER
+	IDENTIFIER [n:m]
+
+1. IDENTIFIER will be one of the following:
+	a. CONSTANT
+	b. PARAMETER
+	c. VARIABLE
+	d. FUNCTION with no arguments
+	e. FIELD NAME
+	f. TABLE NAME
+	g. EXTERNAL FUNCTION with no arguments
+2. A variable must be assigned to before being used.
+3. Search order: Use the using clause first, then a regular lookup.
+
+----------------------------------------------------------------------
+Indexed Table
+	IDENTIFIER [ exprs ]
+
+1. IDENTIFIER can be:
+	a. TABLE
+	b. EXTLOOKUP
+2. If IDENTIFIER is a table, then there can only be
+   one expression in exprs, and it must evaluate to T_INTEGER.
+
+3. If IDENTIFIER is a EXTLOOKUP, then each expression must match
+   the proto-type for that lookup table.
+
+4. NULL can be used as a valid key.
+
+----------------------------------------------------------------------
+Table Field reference (with optional substring spec e1)
+	IDENTIFIER1 . IDENTIFIER2
+	IDENTIFIER1 . IDENTIFIER2 [n:m]
+
+1. IDENTIFIER1 must be the a table name or variable/parameter of type T_REC
+	and T_ROW.
+
+2. IDENTIFIER2 must be a field name in the domain of IDENTIFIER1.
+3. IDENTIFIER1 (if it is a variable) must be initialized before it
+   is used.
+
+----------------------------------------------------------------------
+Table Field access (with optional substring spec e2)
+	IDENTIFIER1 [...] . IDENTIFIER2
+	IDENTIFIER1 [...] . IDENTIFIER2 [n:m]
+
+1. IDENTIFIER1 must be a S_TABLE or a S_EXTLOOKUP.
+2. IDENTIFIER2 must be a proper field name.
+
+----------------------------------------------------------------------
+	for all <idlist> in <expr1> <expr2>
+	for some <idlist> in <expr1> <expr2>
+	for <idlist> in <expr1> computer <expr2> [WHERE <expr3>]
+
+1. Each variable name in idlist must not already be in use.
+2. If a using_clause is active, the variables cannot
+   clash with field names.
+
+----------------------------------------------------------------------
+FOR ITERATION: FOR ALL, FOR SOME
+	FOR ALL idlist IN e1 e2
+	FOR SOME idlist IN e1 e2
+
+1. The identifiers in idlist must not already
+   be in use. (the same rules apply as to variable names)
+
+2. The identifiers remain in existence until the end of the rule
+   or function.
+
+3. The expression 'e2' must evaluate to a boolean type.
+
+4. Multiple identifiers can only be used when 'e1' is a list
+   type.
+
+5. The number of elements in the list must be evenly
+	   divisible by the number of identifiers.
+
+6. The data types of every nth element in the list must
+   be the same. For n upto the number of identifiers.
+
+7. 'e1' must be list type, string, or table row.
+
+----------------------------------------------------------------------
+	FOR idlist IN e2 COMPUTE e1 WHERE e3
+	FOR idlist IN e2 COMPUTE e1
+
+1. e1 must be a group expression.
+2. e3 is optional.
+3. When e3 is specified it must evaluate to a boolean type
+4. Same rules for 'idlist' and 'e2' apply as in the FOR ALL and FOR SOME
+   loops.
+5. The group function COUNT cannot have an argument when used in this context.
+
+----------------------------------------------------------------------
+	a,b,c: IDENTIFIER
+
+1. The identifier must be the name of an external lookup or
+   table.
+
+----------------------------------------------------------------------
+	a,b,c: {IDENTIFIER}
+
+1. It is not allowed to declare a list of T_ROW or T_REC.
+
+----------------------------------------------------------------------
+rule <id>|<integer> [using <table-name] is
+
+1. The rule id must be unique.
+2. The table name in the using clause must refer to
+   a real table.
+
+----------------------------------------------------------------------
+function <id> ( parameters ) is
+
+1. The function name must be already used.
+2. The parameter names must be unique.
+3. Paramater names must not clash with a
+   previosuly declared object.
+
+----------------------------------------------------------------------
+constant <id> is <expr>
+
+1. The name of the constant must be unique.
+2. The expression 'e1' must be constant.
+
+----------------------------------------------------------------------
+Finish off the function.
+
+1. A function can only return assignable types.
+2. The type of the last statement is the return type
+   for the function.
+3. A function must consists of at least 1 statement.
+
+----------------------------------------------------------------------
+ * Finish off the rule.
+
+1. A rule must evaluate to a BOOLEAN type.
+2. The last statement must return BOOLEAN.
+3. A rule must have at least 1 statement.
+
+----------------------------------------------------------------------
+An external function is being declared.
+
+1. The name of this function must not already be used by another object.
+2. Give a warning if the name is not found in the
+   internal list of external objects. (BRE()->externals).
+
+3. If the name is found, check that the number of input parameters
+   match.
+
+4. Check that the parameters are unique. (There is no reason for this
+   except to be consistent)
+
+----------------------------------------------------------------------
+An external lookup being declared.
+
+1. Give a warning if the name was not found in the internal
+   list of external objects.
+
+2. If the name is found, check that the number of key arguments
+   equals the number of input arguments to the lookup callback.
+
+3. Check that the number of fields equals the number of output
+   arguments to the lookup callback.
+
+4. Make sure field names are unique.
+5. Make sure key fields are unique.
+
+----------------------------------------------------------------------
+WARN WITH: arg, arg, arg, ...
+FAIL WITH: arg, arg, arg, ...
+
+1. The first argument is mandatory.
+2. All arguments must be integer, float, string, or boolean.
+
+----------------------------------------------------------------------
+Assignment statments.
+
+	IDENTIFIER := e1
+
+1. The type must match the type of the identifier.
+2. This statement does not have a type.
+3. Assignments are only allowed to variables.
+4. Assignments using null are allowed.
+
+----------------------------------------------------------------------
+BEGIN ...expressions... END
+
+1. The type of the last statement in the block must be boolean.
+2. The type of the block is boolean. At run-time the value
+   is equal to the value of the last statement in the statement list.
+3. An empty block is illegal.
+
+7.0 EXAMPLES
+------------
+The following are examples from the current rule set.
+
+---
+--- EXAMPLES
+---
+
+external lookup T0000052[k1].{DESCRIPTION}
+external lookup T0000022[k1,k2,k3].{X,Y}
+external lookup T0000067[k1].{IFO-ID,X}
+external lookup T0000020[k1,k2,k3].{STATUS,SALES-SERVCE-VAL,Z}
+external lookup T0000023[k1,k2,k3].{SF-X}
+external lookup T0000045[k1,k2,k3].{X,Y,Z}
+external lookup T0000024[k1,k2,k3].{X,Y,Z}
+external lookup TMSG135T[k1].{T2L-DESCR,BAR,FOO}
+
+function valid_date(dte) is
+	dte: string;
+	true;
+
+function embedded_spaces(str) is
+	str: string;
+	" " not in str
+
+rule 129 using ORDER_LINE_ITEMS is
+	ENTRY-KEY[0:1] in {" ", "#", "M", "*", "R", "S", "W"}
+
+rule r1_982 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY in {" ","M","#"} then
+		for all f in {CUST-DLVR-DT-TIME, CUST-INSTALL-DT,
+						CUST-RQS-DT-TIME, DATE-CYCLE}
+			valid_date(f)
+
+rule 343 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY in {" ","M","#"} and INTRN-PRC-CD-6 = "2" then
+		ORDER_HEADER.TRADE-IC = "T"
+
+--  OP-FLG
+rule r1_994 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY in {" ","M","#"} then
+		for all ch in OP-FLG[0:2]
+			ch in {"0","1","2","3","4","5","6","7","8","9"}
+
+rule 998 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY = "R" then PROD-NO <> null
+
+-- SF-X
+rule 070 using ORDER_LINE_ITEMS is
+	if ENTRY-KEY = "  " then
+		for some f in { "SF-COMM-WF1", "SF-COMM-WF2", "SF-COMM-WF3",
+			"SF-COMM-WF4", "SF-COMM-WF5", "SF-COMM-WF6",
+			"SF-COMM-WF7", "SF-COMM-WF8", "SF-COMM-WF9", "SF-COMM-WF10" }
+		T0000023[PL, "A", f].SF-X <> null
+
+
+function isdigits(str) is
+	str: string;
+	for all ch in str
+		ch in "0123456789";
+
+function numeric(str) is
+	str: string;
+	isdigits(str)
+
+function isalpha(str) is
+	str: string;
+	for all ch in str
+		ch in "abcdefghijklmnopqrstuvwxyz"
+			or ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+--  TRADE-IC
+rule 830 using ORDER_HEADER is
+	TRADE-IC[0:1] in {"I","T"}
+
+-- General Discount Edit
+rule 978 using ORDER_HEADER is
+	MCC-DISC + PA-DISC + DIS-DISC < 100.0
+
+
+-- General Discount Edit
+rule r978a using ORDER_HEADER is
+	sum({MCC-DISC, PA-DISC, DIS-DISC}) < 100.0
+
+rule 711 using ORDER_HEADER is
+	if ORDER-CLASS = "CR" or BILL-STAT[0:1] in {"B","S"} or STATE-CLASS <> "NE"
+		or "06" in {	SPECIAL-CODE-1, SPECIAL-CODE-2, SPECIAL-CODE-3,
+				SPECIAL-CODE-4, SPECIAL-CODE-5, SPECIAL-CODE-6,
+				SPECIAL-CODE-7, SPECIAL-CODE-8 }
+	then CHANGE-CD <> "00"
+
+--  CONFIG-APP-NAME
+rule 722 using ORDER_HEADER is
+	if CONFIG-APP-CODE <> null then
+		CONFIG-APP-NAME <> null
+
+rule ex008 using ORDER_HEADER is
+	if ORDER-TYPE = "C1" and ORDER-CLASS = "OR" then
+		(for f in ORDER_LINE_ITEMS compute max(f.OP-ORDER-PRICE)
+			where f.ENTRY-KEY = " ") > 500
+
+constant million is 1000000
+rule ex004 using ORDER_HEADER is
+	if (for f in ORDER_LINE_ITEMS compute max(f.DLR-LINE-TOTAL)) > million
+	then
+		for some g in {SPECIAL-CODE-1, SPECIAL-CODE-2, SPECIAL-CODE-3, SPECIAL-CODE-4,
+				SPECIAL-CODE-5, SPECIAL-CODE-6}
+			g = "20"
+
+rule ex001 is
+	for all x in ORDER_LINE_ITEMS
+		for all y in ORDER_LINE_ITEMS
+			if x.SUP-X = y.SUP-X then
+				x.RC = y.RC
+

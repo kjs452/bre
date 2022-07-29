@@ -1,0 +1,879 @@
+1/19/98
+
+USING THE BRE LIBRARY
+---------------------
+The BRE library is an independant module for applying business rules to a set
+of database tables. B.R.E. stands for Business Rule Engine. (or Businesss Rule Edits).
+The initial client of BRE will be the "E" ORDER SERVER.
+
+BRE implements a language compiler and a byte-code evaluator. BRE is a software
+component that evaluates a set of rules for data that is given in a relational
+database format.
+
+The BRE interface allows the calling application to:
+	1. Register schema information about the database format. This informs the
+	   BRE library about the fields that are included in the order data.
+	2. Compile one or more ASCII files containing business rules.
+	3. Evaluate the rules.
+
+
+1.0 INTRODUCTION
+----------------
+  +---------------------------------------------------------------------------------+
+  |                                YOUR APPLICATION                                 |
+  + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  |                                              +------------------------------+   |
+  |                                              |         BRE LIBRARY          |   |
+  |+----------------------+                      +------------------------------+   |
+  ||(1) Register Callbacks|--------------------->|                              |   |
+  |+----------------------+                      |                              |   |
+  |         *bre_register_table()                |                              |   |
+  |         *bre_register_table_field()          |                              |   |
+  |         *bre_register_table_row_count()      |                              |   |
+  |          bre_register_tell_field_referenced()|       B   R   E              |   |
+  |          bre_register_external()             |       U   U   N              |   |
+  |          bre_register_query_row_change()     |       S   L   G              |   |
+  |         *bre_register_query_field_data()     |       I   E   I              |   |
+  |          bre_register_emit_rule_diagnostic() |       N       N              |   |
+  |                                              |       E       E              |   |
+  |+------------------------+                    |       S                      |   |
+  ||(2) Compile Rule file(s)|------------------->|       S                      |   |
+  |+------------------------+                    |                              |   |
+  |         *bre_compile_rules()                 |                              |   |
+  |                                              |                              |   |
+  |                     BRE_REFERENCED_CB <------|                              |   |
+  |                                              |                              |   |
+  |+------------------+                          |                              |   |
+  ||(3) Evaluate rules|------------------------->|                              |   |
+  |+------------------+                          |                              |   |
+  |         *bre_evaluate_rules()                |                              |   |
+  |                                              |                              |   |
+  |                     BRE_ROWCOUNT_CB <--------|                              |   |
+  |                     BRE_ROWCHANGED_CB <------|                              |   |
+  |                     BRE_FIELD_QUERY_CB <-----|                              |   |
+  |                     BRE_EXTERNAL_CB <--------|                              |   |
+  |                     BRE_RULEDIAG_CB <--------|                              |   |
+  |                                              |                              |   |
+  |+------------------------+                    |                              |   |
+  ||(4) Shutdown BRE library|------------------->|                              |   |
+  |+------------------------+                    +------------------------------+   |
+  |          bre_shutdown()                                                         |
+  |                                                                                 |
+  +---------------------------------------------------------------------------------+
+                        - '*' denotes a mandatory function call.
+
+The BRE library is an independent library that provides an
+API for applying business rules to database tables and fields.
+
+The basic steps for using the BRE library are as follows:
+	1. Register the call back functions.
+		a. bre_register_table() - required.
+		b. bre_register_table_field() - required.
+		c. rowcount callback - required.
+		d. field query callback - required.
+		e. field referenced callback - optional
+		f. row changed callback - optional
+		g. rule diagnostics callback - optional.
+		h. Register the external lookup tables - optional.
+		i. Register the external C functions - optional.
+
+	2. Compile rules file(s). - Required.
+
+	3. For each database object to validate, evaluate the rules. - Required.
+
+	4. Shutdown the library with bre_shutdown().
+
+The BRE library uses callback functions extensively as a means of communicating
+between the application and the BRE module.
+
+1.1 CALLBACKS DURING RULE COMPILATION:
+After a rule file is compiled, the BRE_REFERENCED_CB will be called for each
+field that has been referenced by at least on rule in the rule file.
+The purpose of this is to allow the BRE clients to take appropriate actions
+based on the fields that may be needed during rule evaluation.
+
+The BRE_REFERENCED_CB is optional. If not BRE_REFERENCED_CB has been registered,
+then the application will not be made aware of which fields/tables have been
+referenced by the rule files.
+
+1.2 CALLBACKS DURING RULE EVALUATION:
+During evaluation of the rules the callback functions will be called by BRE for
+the following tasks:
+	1. To determine the number of rows in a table. (BRE_ROWCOUNT_CB)
+	2. To determine if a table row has changed. (BRE_ROWCHANGED_CB)
+	3. To fetch the data for a given table, row, and field. (BRE_FIELD_QUERY_CB)
+	4. To process external functions or perform a lookup. (BRE_EXTERNAL_CB)
+	5. To return information about rules that failed. (BRE_RULEDIAG_CB)
+
+1.3 Cookies
+Cookies are abstract pointer to the client-side data structures.
+When the database schema is loaded a "cookie" may be associated with each table
+or field. A cookie is an client-defined pointer (void*). The BRE library does not
+care what the application chooses as the cookie. Later, when the client callbacks
+are invoked, the cookie will be used as one of the parameters.
+
+In most cases the application will use cookies to point to application
+data structures for fast access to table/field data.
+
+
+1.5 BRE Internal Design
+The BRE module consists of a YACC parser, lexical analyser, symbol table
+byte-code compiler, and byte-code evaluator. The general architecture looks
+something like this:
+
+  +---------------------------------------------------------------------------------+
+  |                                     BRE API                                     |
+  + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  |                                                                                 |
+  | +----------+                                                                    |
+  | |          |                                                                    |
+  | |  Symbol  | <------------------------+                                         |
+  | |  Table   |                          |                                         |
+  | |          |                          |                                         |
+  | +----------+                          |                                         |
+  |                                       |                                         |
+  |                                       V                                         |
+  | +----------+     +----------+     +-----------+                                 |
+  | |          |     |          |     |           |                                 |
+  | | Lexical  | --> |   YACC   | --> | Byte-code | -----+                          |
+  | | Analyzer |     |  Parser  |     | Compiler  |      |                          |
+  | |          |     |          |     |           |      |                          |
+  | +----------+     +----------+     +-----------+      |                          |
+  |                                                      |                          |
+  |                                                      V                          |
+  |   s-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----s     |
+  |     ... |     |     |     |     |     |     |     |     |     |     | ...       |
+  |   s-----+-----+-----+-----+---V-+-----+-----+-----+-----+-----+-----+-----s     |
+  |                               |                   The Byte-Code Program         |
+  |                               |                                                 |
+  |             +-----------+     |                                                 |
+  |             |           |     |                                                 |
+  |             | Byte-Code | <---+                                                 |
+  |             | Evaluator |                                                       |
+  |             |           |                                                       |
+  |             +-----------+                                                       |
+  |                                                                                 |
+  +---------------------------------------------------------------------------------+
+
+* BRE API:
+	All of the components of BRE are wrapped around a set of functions that
+	comprises the BRE API.
+	Source Files:	bre_api.c	- Public functions for bre library.
+			bre_api.h	- Public header file
+			bre_prv.h	- Private Header File for BRE.
+
+* Symbol Table:
+	This component will keep track of table and field names. When an external
+	lookup or C function is added, the name will be placed into the symbol table.
+	Source Files:	bre_sym.c	- Symbol Table Routines and Data Structure
+			bre_sym.h	- Header file for bre_sym.h
+
+* Lexical Analyzer:
+	This module reads the input file and collects individual characters into
+	tokens which are then passed to the parser.
+	Source Files: bre_lex.c		- definition of the yylex() routine
+
+* Yacc Parser:
+	The grammar rules for the BRE language are matched using yacc. As each major language
+	construct it parsed, a parse tree is constructed.
+	Source Files:	bre_yac.y	- Yacc Grammar
+			bre_par.c	- Parse Tree Builder & Semantic Checker
+			bre_par.h	- Header file for bre_par.c
+
+* Byte-code Compiler:
+	When an expression has been completely parsed and put into a parse tree, the
+	byte-code compiler is invoked to convert the parse tree into byte-codes.
+
+	Byte-codes consist of OPCODES and OPERANDS that are placed into a byte stream.
+	Opcodes consists of simple stack oriented instructions such as "PUSH INTEGER",
+	"POP", "ADD", etc..
+	Source Files:	bre_gen.c	- Byte-Code generation
+			bre_ops.h	- Definition of the BRE OPCODES
+
+* Byte-code Evaluator:
+	When checking a database object against the rules, the byte-code evaluator will
+	interpret the byte codes for all rules. Each rule returns a logical true or false,
+	which determines the success or failure of a rule.
+	Source Files:	bre_run.c	- "run" (evaluation) of a rule.
+			bre_ops.h	- Definition of the BRE OPCODES.
+
+* Misc.:
+	Source Files:	bre_bit.c	- Set routines (currently not in use)
+			bre_bit.h	- header file for bre_bit.c
+			bre_err.c	- Error Handling for parser.
+			bre_err.h	- header file for bre_err.c
+
+For more information see the BRE Internal documenation.
+
+2.0 THE CALLBACKS
+-----------------
+2.1 BRE_EXTERNAL_CB
+/*-----------------------------------------------------------------------------
+| Purpose:  To register a callback procedure with the business rule engine. This
+|	    callback defines a new function or lookup table that can be accessed
+|	    from the business rule language.
+|
+|	    The caller must register all functions/lookup tables before
+|	    compiling a rule file.
+|
+| name      - name of the function or lookup table.
+| args_in   - A string describing the # of parameters and types
+|             of each parameter.
+| args_out  - A string the specifies the return value(s). A function
+|             has only 1 return value, a lookuptable has 1 or more.
+|
+|  To specify 'args_in' or 'args_out' use this key
+|     'B'   - Boolean      BRE_INTEGER
+|     'I'   - Integer      BRE_INTEGER
+|     'F'   - Float        BRE_FLOAT
+|     'S'   - String       BRE_STRING
+*---------------------------------------------------------------------------*/
+typedef int (BRE_EXTERNAL_CB)(
+   BRE_DATUM *in,       /* I - input paramters */
+   BRE_DATUM *out);     /* O - output parameters */
+
+   void
+bre_register_external(
+   const char     *name,            /* I */
+   const char     *args_in,         /* I */
+   const char     *args_out,        /* I */
+   BRE_EXTERNAL_CB *function);      /* I callback function */
+
+External lookup's and external functions are "linked" into the BRE
+library by registering a BRE_EXTERNAL_CB function. The BRE language allows
+external references using the following syntax:
+
+In C you would specify this:
+	bre_register_external("valid-date", "S", "B", my_valid_date_func);
+
+In the BRE language you would specify:
+	external function valid-date(dte)
+
+This specifies a function 'valid-date' is to be made available
+to the rules in the rule file.
+
+In C you would specify this:
+	bre_register_external("zip-codes", "SSS", "SSSF", my_zip_code_lookup);
+
+In the BRE language you would specify:
+	external lookup ZIP-CODES[STATE,COUNTY,ZIP].{STATE,COUNTY,CITY,ZIP-CODE,POPULATION}
+
+Both of these external objects are implemented using the same type of
+callback. An external function returns 1 value. An external lookup returns
+many values.
+
+
+2.2 BRE_REFERENCED_CB
+/*-----------------------------------------------------------------------------
+| Callback prototype - Optional
+| Purpose:  To let the client know which fields are referenced by the
+|           current business rules. This information may be needed by
+|           the client so that it can ensure that values for these fields
+|           will always be available at rule evaluation time.
+|
+| Calls to this function are made as a result of a successful call to
+| 'bre_compile_rules()'.
+*-----------------------------------------------------------------------------*/
+typedef void (BRE_REFERENCED_CB)(
+   const char     *table_name,      /* I */
+   const void     *table_cookie,    /* I client-defined value */
+   const char     *field_name,      /* I */
+   const void     *field_cookie);   /* I client-defined value */
+
+   void
+bre_register_tell_field_referenced(
+   BRE_REFERENCED_CB *tell_field_reference);
+
+This callback is called when a new rule files is being
+compiled (using the bre_compile_rules() function). For each field
+that has been referenced this callback is called. The purpose of this
+callback is for certain clients that need to know which fields they
+must be prepared to have data ready for.
+
+Clients who don't care about this information do not have to
+register this callback.
+
+2.3 BRE_ROWCOUNT_CB
+/*-----------------------------------------------------------------------------
+| Callback prototype - Required
+| Purpose:  To indicate (to bre) the number of rows of data that exist for
+|           the given table.
+|
+| This function is called (by bre) for each known table early from within
+| 'bre_evaluate_rules()'.
+*-----------------------------------------------------------------------------*/
+typedef unsigned int (BRE_ROWCOUNT_CB)(
+   const char     *table_name,      /* I */
+   const void     *table_cookie);   /* I client-defined value */
+
+   void
+bre_register_query_table_row_count(
+   BRE_ROWCOUNT_CB      *query_table_row_count);
+
+When the BRE language is iterating over all the rows of a table the
+ROWCOUNT_CB is called to determine how many rows are in the table.
+Clients are required to register this function.
+
+
+2.4 BRE_ROWCHANGED_CB
+/*-----------------------------------------------------------------------------
+| Callback prototype - Optional
+| Purpose:  To determine whether the given table / row was 'changed'.
+|           Many business rules will not be applied against table rows that
+|           have not changed.
+|           If no 'query_row_change()' function is registered, the business
+|           rule engine will assume that all table rows have changed.
+| Returns:  1 - changed, 0 - unchanged
+|
+| This function will be called (by bre) for each row in each table, as
+| determined by the value returned by 'query_table_row_count()'.
+*-----------------------------------------------------------------------------*/
+typedef int (BRE_ROWCHANGED_CB)(
+   const char     *table_name,      /* I */
+   const void     *table_cookie,    /* I client-defined value */
+   unsigned int   row_number);      /* I */
+
+   void
+bre_register_query_row_change(
+   BRE_ROWCHANGED_CB *query_row_change);
+
+This callback function will allow the BRE evaluator perform certain
+optimizations, when evaluating a rule set. In particular, it allows
+the rule engine to ignore rows that have not changed.
+
+This callback is optional. If not present, the rule engine will assume
+it must evaluate all the rows of an order.
+
+
+2.5 BRE_FIELD_QUERY_CB
+/*-----------------------------------------------------------------------------
+| Callback prototype - Required
+| Purpose:  To provide (to bre) the value of a field for a given table / row.
+|
+| This function is called for each field in each (changed) table / row that
+| is referred to by a business rule.
+*-----------------------------------------------------------------------------*/
+typedef void (BRE_FIELDQUERY_CB)(
+   const char     *table_name,      /* I */
+   const void     *table_cookie,    /* I client-defined value */
+   const char     *field_name,      /* I */
+   const void     *field_cookie,    /* I client-defined value */
+   unsigned int   row_number,       /* I */
+   int            new_value,        /* I 1 - new, 0 - old */
+   BRE_DATUM      *field_value);    /* O */
+
+   void
+bre_register_query_field_data(
+   BRE_FIELDQUERY_CB *query_field_data);
+
+This is one of the most important functions for the rule engine. Whenever
+a field is referenced in a rule, this callback is called to fetch the data.
+The 'row_number' specifies the row of data requested. The first row is '0', the
+second row is '1' and so on...
+
+The caller will be responsible for populating the 'field_value' structure
+with the requested data. See 3.2 BRE Data types for a description of the
+BRE_DATUM structure.
+
+If a field is a string, then a pointer to string must be returned
+in 'field_value'. The length must also be returned. The BRE engine will
+make a copy of all strings that are returned from this callback.
+
+2.5.1 OLD and NEW data
+The BRE language allows for the OLD or current value of a field to
+be specified. Using the OLD keyword, rules can request the value of
+a field BEFORE it was changed. The parameter 'new_value' will normally
+be set to '1' when the new (or current) value of a field is desired.
+However, in some cases new_value will be set to 0. In these cases
+the callback function should either return the old value.
+
+
+2.6 BRE_RULEDIAG_CB
+/*-----------------------------------------------------------------------------
+| Callback prototype - Optional
+| Purpose:  To communicate diagnostic information to the client.
+|           If no 'emit_rule_diagnostic()' function has been registered,
+|           messages are are printed to <stderr>.
+*-----------------------------------------------------------------------------*/
+typedef void (BRE_RULEDIAG_CB)(
+   const char        *filename,  /* I */
+   const char        *rule_id,   /* I */
+   BRE_DIAGNOSTIC failure,       /* I BRE_FAIL-Failure, BRE_WARN-Warning */
+   char     **message_tokens);   /* I Null terminated list of message tokens */
+
+   void
+bre_register_emit_rule_diagnostic(
+   BRE_RULEDIAG_CB      *emit_rule_diagnostic);
+
+For each rule that does not evaluate to TRUE, this callback will be called
+to inform the client that this rule has failed. If an error clause is
+associated with the rule, then the tokens specified with the error clause
+will be placed into the 'message_tokens' array. These values will be converted
+to strings.
+
+All rules that do not have an explicit error clause, will fail with
+BRE_FAIL as the 'failure' value.
+
+The filename and rule_id indicate which rule failed.
+
+
+3.0 EXTERNAL LOOKUPS & EXTERNAL FUNCTIONS
+-----------------------------------------
+3.1 FUNCTION: bre_register_external()
+
+3.2 BRE Data types
+/*
+ * The basic data types
+ *
+ */
+union bre_type;
+struct sym_table;
+
+typedef struct {
+   short    nil;
+   long     val;
+} BRE_INTEGER;
+
+typedef struct {
+   double      val;
+} BRE_FLOAT;
+
+typedef struct {
+   short    len;
+   char     *str;
+} BRE_STRING;
+
+typedef struct {
+   short          len;
+   union bre_type *list;
+} BRE_LIST;
+
+typedef struct {
+   short          nil;
+   short          row;
+   struct symbol  *table;
+} BRE_TABLEROW;
+
+typedef union bre_type {
+   BRE_INTEGER    i;
+   BRE_FLOAT      f;
+   BRE_STRING     s;
+   BRE_LIST       l;
+   BRE_TABLEROW   tr;
+} BRE_DATUM;
+
+3.3 Writing a lookup table.
+
+3.4 Writing an external function.
+
+
+
+4.0 LOADING THE SCHEMA
+----------------------
+4.1 FUNCTION: bre_register_table()
+/*-----------------------------------------------------------------------------
+| Purpose:  To tell the business rule engine that the given name corresponds
+|           to a 'table'.
+*-----------------------------------------------------------------------------*/
+   void
+bre_register_table(
+   const char     *table_name,      /* I */
+   const void     *table_cookie);   /* I Optional client-defined value */
+
+Before calling bre_compile_rules(), the client must specify all tables
+and fields that comprise the database schema. This function specifies the
+name of a table. 'table_name' will specify the case insensitive name of
+the table. This is the name that rule writers will use to refer to the table.
+Table names must conform to the following rules:
+	* First character must be a letter.
+	* Remaining characters can be a letter, digit, underscore '_', or minus '-'.
+
+The 'table_cookie' is any pointer that has useful meaning to the client.
+When the BRE_QUERYFIELD_CB callback is called the table_cookie will be
+passed back to the client. 'table_cookie' is optional.
+
+
+4.2 FUNCTION: bre_register_field()
+/*-----------------------------------------------------------------------------
+| Purpose:  To tell the business rule engine that the given field name
+|           is associated with the given table name.
+*-----------------------------------------------------------------------------*/
+   void
+bre_register_table_field(
+   const char     *table_name,      /* I */
+   const char     *field_name,      /* I */
+   char     field_type,       /* I (B, I, F, S) */
+   unsigned int   field_length,  /* I Meaningful for S only */
+   const void     *field_cookie);   /* I Optional client-defined value */
+
+Before calling bre_compile_rules(), the client must specify all tables
+and fields that comprise the database schema. This function specifies a
+field (associated with a table). The table name must already have been
+registered. 'field_name' the name that rule writers will use to
+refer to the field. Field names must conform to the same naming rules
+as table names.
+
+The type of the field is specified using the characters 'B' (for boolean),
+'I' (for integer), 'F' (for float), and 'S' (for string). You can specify
+a maximum length for strings with the 'field_length' parameter. All other
+field types will ignore this paramater. Actually, the current implementation
+of BRE ignores 'field_length'.
+
+The 'field_cookie' parameter is any pointer that has useful meaning to
+the client. When the BRE_QUERYFIELD_CB callback is called the
+field_cookie will be passed back to the client. 'field_cookie' is optional.
+
+
+5.0 COMPILING RULES
+-------------------
+
+5.1 FUNCTION: bre_compile_rules()
+/*-----------------------------------------------------------------------------
+| Purpose:  To tell the business rule engine to compile the rules found
+|           in the given rule_file. Diagnostic messages will be written
+|           to the diagnostics_file in the event that errors are encountered.
+| Returns:	BRE_SUCCESS - Success.
+|		BRE_FAIL - Some rules Failed.
+*-----------------------------------------------------------------------------*/
+
+typedef enum { BRE_SUCCESS, BRE_WARN, BRE_FAIL } BRE_DIAGNOSTIC;
+
+   BRE_DIAGNOSTIC
+bre_compile_rules(
+   const char  *rule_file,    /* I */
+   const char  *diagnostics_file);  /* I */
+
+This function compiles the rules contained in the file 'rule_file'.
+Internally the rules are converted into an efficient byte-code for
+quick evaluation. If any errors are detected a value of BRE_FAIL is
+returned. Otherwise BRE_SUCCESS is returned.
+
+5.2 Parsing Errors
+Many errors are possible when parsing a rule file. To recieve the messages, the
+'diagnostics_file' should be the name of a file. All parsing errors
+will be written to this file. If 'diagnostics_file' is NULL, then no parsing
+errors will be reported.
+
+6.0 EVALUATING RULES
+--------------------
+6.1 FUNCTION: bre_evaluate_rules()
+/*-----------------------------------------------------------------------------
+| Purpose:  To tell apply the 'currently defined' business rules against
+|           the 'current' table data.
+| Returns:	BRE_SUCCESS - Success.
+|		BRE_WARN - success with some warnings.
+|		BRE_FAIL - some rules failed.
+*-----------------------------------------------------------------------------*/
+
+typedef enum { BRE_SUCCESS, BRE_WARN, BRE_FAIL } BRE_DIAGNOSTIC;
+
+   BRE_DIAGNOSTIC
+bre_evaluate_rules(void);
+
+This is the most important function of the BRE library. You will
+want to call this function to check a set of database records against your
+compiled rules. When this function is called, all the compiled rules are
+evaluated. This function return BRE_SUCCESS if all rules succeeded. If
+some rules returned warning (but no failures), the BRE_WARN is returned.
+If some rules failed, the BRE_FAIL is returned.
+
+6.2 Handling Diagnostic Information
+The simple return value from this function is not very helpful for determining
+which rule failed. That's why it is highly recommended that you register
+a BRE_RULEDIAG_CB callback function. This function will get called for each rule
+that fails.
+
+7.0 FINISHING UP
+----------------
+7.1 FUNCTION: bre_shutdown()
+
+	void bre_shutdown(const char *debug_file)
+
+This is an optional step. Calling bre_shutdown() will free all
+memory allocated by the BRE library. If 'debug_file' is
+non-null, then the byte-code program will be written to 'debug_file'
+along with many statistics about the rules, and schema.
+
+8.0 EXAMPLE:
+------------
+The following C code show how to use the BRE library
+in a simple case. In this example the database tables are
+implemented as hard coded arrays in the program.
+
+/*----------------------------------------------------------------------
+ * Sample program to show how to use the BRE library.
+ *
+ */
+#include <stdio.h>
+#include <assert.h>
+
+#include "bre_api.h"
+
+static struct {
+	char	*prodcode;
+	char	*description;
+	char	*group_code;
+	int	taxable;
+	double	price;
+} Product[] = {
+"F-001",	"Food processor type1",		"FOOD",		1,	12.95,
+"F-002",	"Food processor type2",		"FOOD",		0,	19.95,
+"B-001",	"Lady's Shaver",		"BATH",		1,	39.99,
+"B-002",	"Men's Nose Hair Shaver",	"BATH",		1,	24.95,
+"B-003",	"Cosmetic Mag. Mirror",		"BATH",		1,	10.00,
+"C-001",	"Mouse Pad",			"COMPUTER",	1,	6.95,
+"C-002",	"CDROM Storage Case",		"COMPUTER",	1,	21.50,
+"C-003",	"Mouse Cleaner",		"COMPUTER",	1,	5.99,
+};
+
+static struct {
+	int	empnum;
+	char	*first;
+	char	*last;
+	char	*phone;
+	double	salary;
+	char	*start_date;
+	char	*group_code;
+	int	department;
+} Employee[] = {
+112233,	"Ken",		"Stauffer",	"319-222-3333", 3234.33, "01/01/1999", "XGP", 6,
+1133,	"Kiji clam",	"Stun",		"391-211-3333", 3900.04, "08/11/1988", "SUP", 1,
+2211,	"Kooboo",	"Stopopop",	"422-202-3333", 8234.08, "03/04/1968", "XGP", 2,
+2299,	"Lupaz",	"Turdotio",	"702-999-2133", 9000.01, "13/09/1991", "XGD", 3,
+8812,	"Mary",		"Lamb",		"408-243-2322", 81000.0, "07/29/1987", "SUP", 1,
+};
+
+typedef enum {
+	PRODUCT_TABLE, EMPLOYEE_TABLE
+} TABLE_ID;
+
+typedef enum {
+	P_PRODCODE, P_DESCRIPTION, P_GROUP_CODE, P_TAXABLE, P_PRICE,
+	E_EMPNUM, E_FIRST, E_LAST, E_PHONE, E_SALARY, E_START_DATE, E_GROUP_CODE, E_DEPARTMENT
+} FIELD_ID;
+
+static void register_schema(void)
+{
+	bre_register_table("PRODUCT", (void*)PRODUCT_TABLE);
+	bre_register_table_field("PRODUCT", "PRODCODE",		'S', 0, (void*)P_PRODCODE);
+	bre_register_table_field("PRODUCT", "DESCRIPTION",	'S', 0, (void*)P_DESCRIPTION);
+	bre_register_table_field("PRODUCT", "GROUP-CODE",	'S', 0, (void*)P_GROUP_CODE);
+	bre_register_table_field("PRODUCT", "TAXABLE",		'B', 0, (void*)P_TAXABLE);
+	bre_register_table_field("PRODUCT", "PRICE",		'F', 0, (void*)P_PRICE);
+
+	bre_register_table("EMPLOYEE", (void*)EMPLOYEE_TABLE);
+	bre_register_table_field("EMPLOYEE", "EMPNUM",		'I', 0, (void*)E_EMPNUM);
+	bre_register_table_field("EMPLOYEE", "FIRST-NAME",	'S', 0, (void*)E_FIRST);
+	bre_register_table_field("EMPLOYEE", "LAST-NAME",	'S', 0, (void*)E_LAST);
+	bre_register_table_field("EMPLOYEE", "PHONE",		'S', 0, (void*)E_PHONE);
+	bre_register_table_field("EMPLOYEE", "SALARY",		'F', 0, (void*)E_SALARY);
+	bre_register_table_field("EMPLOYEE", "START-DATE",	'S', 0, (void*)E_START_DATE);
+	bre_register_table_field("EMPLOYEE", "GROUP-CODE",	'S', 0, (void*)E_GROUP_CODE);
+	bre_register_table_field("EMPLOYEE", "DEPARTMENT",	'I', 0, (void*)E_DEPARTMENT);
+}
+
+static unsigned int rowcount_cb(const char *tname, const void *tcookie)
+{
+	TABLE_ID tbl;
+
+	tbl = (TABLE_ID)tcookie;
+
+	switch(tbl) {
+	case PRODUCT_TABLE:
+		return sizeof(Product) / sizeof(Product[0]);
+
+	case EMPLOYEE_TABLE:
+		return sizeof(Employee) / sizeof(Employee[0]);
+
+	default:
+		assert(0);
+	}
+}
+
+static void fieldquery_cb(const char *tname, const void *tcookie,
+				const char *fname, const void *fcookie,
+				unsigned int row_number, int new_value,
+							BRE_DATUM *field_value)
+{
+	TABLE_ID tbl;
+	FIELD_ID fld;
+
+	tbl = (TABLE_ID)tcookie;
+	fld = (FIELD_ID)fcookie;
+
+	switch(tbl) {
+	case PRODUCT_TABLE:
+		switch(fld) {
+		case P_PRODCODE:
+			field_value->s.str	= Product[ row_number ].prodcode;
+			field_value->s.len	= strlen( Product[ row_number ].prodcode );
+			break;
+		case P_DESCRIPTION:
+			field_value->s.str	= Product[ row_number ].description;
+			field_value->s.len	= strlen( Product[ row_number ].description );
+			break;
+		case P_GROUP_CODE:
+			field_value->s.str	= Product[ row_number ].group_code;
+			field_value->s.len	= strlen( Product[ row_number ].group_code );
+			break;
+		case P_TAXABLE:
+			field_value->i.nil	= 0;
+			field_value->i.val	= Product[ row_number ].taxable;
+			break;
+		case P_PRICE:
+			field_value->f.val	= Product[ row_number ].price;
+			break;
+		default:
+			assert(0);
+		}
+		break;
+
+	case EMPLOYEE_TABLE:
+		switch(fld) {
+		case E_EMPNUM:
+			field_value->i.nil	= 0;
+			field_value->i.val	= Employee[ row_number ].empnum;
+			break;
+
+		case E_FIRST:
+			field_value->s.str	= Employee[ row_number ].first;
+			field_value->s.len	= strlen( Employee[ row_number ].first );
+			break;
+
+		case E_LAST:
+			field_value->s.str	= Employee[ row_number ].last;
+			field_value->s.len	= strlen( Employee[ row_number ].last );
+			break;
+
+		case E_PHONE:
+			field_value->s.str	= Employee[ row_number ].phone;
+			field_value->s.len	= strlen( Employee[ row_number ].phone );
+			break;
+
+		case E_SALARY:
+			field_value->f.val	= Employee[ row_number ].salary;
+			break;
+
+		case E_START_DATE:
+			field_value->s.str	= Employee[ row_number ].start_date;
+			field_value->s.len	= strlen( Employee[ row_number ].start_date );
+			break;
+
+		case E_GROUP_CODE:
+			field_value->s.str	= Employee[ row_number ].group_code;
+			field_value->s.len	= strlen( Employee[ row_number ].group_code );
+			break;
+
+		case E_DEPARTMENT:
+			field_value->i.nil	= 0;
+			field_value->i.val	= Employee[ row_number ].department;
+			break;
+		default:
+			assert(0);
+		}
+		break;
+
+	default:
+		assert(0);
+	}
+
+}
+
+static void diag_cb(const char *filename, const char *rule_id,
+				BRE_DIAGNOSTIC failure, char **message_tokens)
+{
+	int i;
+
+	if( failure == BRE_WARN )
+		fprintf(stderr, "Warning, %s: rule %s:", filename, rule_id);
+	else
+		fprintf(stderr, "Failure, %s: rule %s:", filename, rule_id);
+
+	for(i=0; message_tokens[i] != NULL; i++) {
+		fprintf(stderr, " %s", message_tokens[i]);
+	}
+
+	fprintf(stderr, "\n");
+}
+
+static void ref_cb(const char *tname, const void *tcookie,
+		const char *fname, const void *fcookie)
+{
+	printf("Rule file referenced field: %s.%s\n", tname, fname);
+}
+
+/*----------------------------------------------------------------------
+ * A valid date is:
+ *	MM/DD/YYYY
+ */
+static int valid_date(BRE_DATUM *args_in, BRE_DATUM *args_out)
+{
+	char *datestr;
+	int datelen;
+	int year, month, day;
+
+	datestr = args_in[0].s.str;
+	datelen = args_in[0].s.len;
+
+	if( datelen != 10 || datestr == NULL ) {
+		args_out[0].i.nil = 0;
+		args_out[0].i.val = 0;
+	}
+
+	month	= (datestr[0]-'0')*10 + datestr[1]-'0';
+	day	= (datestr[3]-'0')*10 + datestr[4]-'0';
+	year	= atoi(datestr + 6);
+
+	if( year < 1900 || day < 1 || day > 32 || month < 1 || month > 12 ) {
+		args_out[0].i.nil = 0;
+		args_out[0].i.val = 0;
+	} else {
+		args_out[0].i.nil = 0;
+		args_out[0].i.val = 1;
+	}
+
+	return 0;
+}
+
+/*----------------------------------------------------------------------
+ * Usage: sample
+ */
+int main(int argc, char *argv[])
+{
+	BRE_DIAGNOSTIC result;	
+
+	register_schema();
+	bre_register_tell_field_referenced( ref_cb );
+	bre_register_query_table_row_count( rowcount_cb );
+	bre_register_query_field_data( fieldquery_cb );
+	bre_register_emit_rule_diagnostic( diag_cb );
+	bre_register_external("valid-date", "S", "B", valid_date);
+
+	result = bre_compile_rules("sample_prog.brl", "errors.txt");
+	if( result != BRE_SUCCESS ) {
+		fprintf(stderr, "Error parsing sample_prog.brl, see errors.txt for details.\n");
+		exit(1);
+	}
+
+	result = bre_evaluate_rules();
+
+	switch( result ) {
+	case BRE_SUCCESS:
+		printf("Success!\n");
+		break;
+
+	case BRE_WARN:
+		printf("Some rules returned warnings.\n");
+		break;
+
+	case BRE_FAIL:
+		printf("Some rules failed!\n");
+		break;
+
+	default:
+		assert(0);
+	}
+
+	bre_shutdown("bredebug.txt");
+	exit(0);
+}

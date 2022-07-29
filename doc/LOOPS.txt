@@ -1,0 +1,681 @@
+
+	for all v1, v2, in <iterator>
+		<body>
+
+	gencode(iterator)		; gencode for list expression.
+
+	OP_PUSH_I	0		; push index variable
+
+LOOP:	OP_GETSP	-2		; (lc1) fetch list value
+	OP_COUNT_L			; get # of list elements
+	OP_GETSP	-2		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; assign to variable v1
+	OP_GETSP	-2		; get list
+	OP_GETSP	-2		; get index value
+	OP_FETCH_LIST			; fetch current list item
+	OP_ASSIGN	v1
+	OP_INCSP	-1		; index = index + 1
+
+	;;;;;;;; assign to variable v2
+	OP_GETSP	-2		; get list
+	OP_GETSP	-2		; get index value
+	OP_FETCH_LIST			; fetch current list item
+	OP_ASSIGN	v2
+	OP_INCSP	-1		; index = index + 1
+
+	gencode(body)			; gencode for the body of the loop
+
+	OP_BRANCH_TRUE	(pop) LOOP	; (FOR SOME uses a BRANCH_FALSE)
+	OP_POP
+	OP_POP
+	OP_PUSH_I	0		; (FOR SOME uses '1')
+	OP_BRANCH	OUT		; lc3
+
+DONE:	OP_POP				; lc4
+	OP_POP
+	OP_PUSH_I	1		; Push a true value (FOR SOME uses '0')
+
+OUT:					; lc5
+
+
+----------------------------------------------------------------------
+FOR ALL/FOR SOME using strings....
+
+	for all v in <string_expression>
+		<body>
+
+	gencode(<string_expression>)	; gencode for list expression.
+
+	OP_PUSH_I	0		; push index variable
+
+LOOP:	OP_GETSP	-2		; (lc1) fetch string
+	OP_COUNT_S			; get # of list elements
+	OP_GETSP	-2		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; assign to variable v1
+	OP_GETSP	-2		; get list
+	OP_GETSP	-2		; get index value
+	OP_FETCH_CHAR			; fetch single char from a position
+	OP_ASSIGN	v
+	OP_INCSP	-1		; index = index + 1
+
+	gencode(body)			; gencode for the body of the loop
+
+	OP_BRANCH_TRUE	(pop) LOOP	; (FOR SOME uses a BRANCH_FALSE)
+	OP_POP
+	OP_POP
+	OP_PUSH_I	0		; (FOR SOME uses '1')
+	OP_BRANCH	OUT		; lc3
+
+DONE:	OP_POP				; lc4
+	OP_POP
+	OP_PUSH_I	1		; Push a true value (FOR SOME uses '0')
+
+OUT:					; lc5
+
+----------------------------------------------------------------------
+FOR ALL/FOR SOME using a table row
+
+	for all v in <list_expression>
+		<body>
+
+	gencode(<list_expression>)	; gencode for list expression.
+
+	OP_PUSH_I	0		; push index variable
+
+LOOP:	OP_GETSP	-2		; (lc1) fetch Table Row
+	OP_COUNT_TR			; get # of list elements
+	OP_GETSP	-2		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; assign to variable v
+	OP_GETSP	-2		; get list
+	OP_GETSP	-2		; get index value
+	OP_SET_ROW			; Set the row number
+	OP_ASSIGN	v
+	OP_INCSP	-1		; index = index + 1
+
+	gencode(body)			; gencode for the body of the loop
+
+	OP_BRANCH_TRUE	(pop) LOOP	; (FOR SOME uses a BRANCH_FALSE)
+	OP_POP
+	OP_POP
+	OP_PUSH_I	0		; (FOR SOME uses '1')
+	OP_BRANCH	OUT		; lc3
+
+DONE:	OP_POP				; lc4
+	OP_POP
+	OP_PUSH_I	1		; Push a true value (FOR SOME uses '0')
+
+OUT:					; lc5
+
+
+----------------------------------------------------------------------
+This loop is changed from the one above. The COUNT_TR
+call is only done once.
+
+FOR ALL/FOR SOME using a table row
+
+	for all v in <list_expression>
+		<body>
+
+	gencode(<list_expression>)	; gencode for list expression.
+
+	OP_GETSP	-1		; (lc1) fetch Table Row
+	OP_COUNT_TR			; get # of list elements
+
+	OP_PUSH_I	0		; push index variable
+
+LOOP:	OP_GETSP	-2		; get table row count
+	OP_GETSP	-2		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; assign to variable v
+	OP_GETSP	-3		; get table row
+	OP_GETSP	-2		; get index value
+	OP_SET_ROW			; Set the row number
+	OP_ASSIGN	v		; (pop)
+	OP_INCSP	-1		; index = index + 1
+
+	gencode(body)			; gencode for the body of the loop
+
+	OP_BRANCH_TRUE	(pop) LOOP	; (FOR SOME uses a BRANCH_FALSE)
+	OP_POP
+	OP_POP
+	OP_POP
+	OP_PUSH_I	0		; (FOR SOME uses '1')
+	OP_BRANCH	OUT		; lc3
+
+DONE:	OP_POP				; lc4
+	OP_POP
+	OP_POP
+	OP_PUSH_I	1		; Push a true value (FOR SOME uses '0')
+
+OUT:					; lc5
+
+----------------------------------------------------------------------
+GROUP FUNCTIONS (Stand alone):
+Group functions can appear "stand alone" meaning they, do not need
+to appear inside of a "for ... compute ... where" construct.
+
+SUM({1,2,3,4})			<- list of INTEGER.
+SUM({1.1, 2.34, 3.43, 4.90})	<- list of FLOAT.
+
+MIN({12.22, 3, 3, 3})
+
+MAX({1,2,2,9,2,8,1})
+
+SUM(TABLE.FIELD)
+
+grpfunc(expr)
+
+expr is one of,
+1. LIST OF INTEGER
+2. LIST OF FLOAT
+3. DOT OPERATOR, field evaluating to INTEGER
+4. DOT OPERATOR, field evaluating to FLOAT
+
+THE CODE,
+
+	;for list			for e_dot
+	gencode(expr)			gencode(expr->left)
+
+	OP_PUSH_I	0		; push index variable
+
+	; for integer
+	OP_PUSH_I	min/max/zero	OP_PUSH_F min/max/zero
+	; for float
+	OP_PUSH_F	min/max/zero	OP_PUSH_F min/max/zero
+
+LOOP:	OP_GETSP	-3		; (lc1) fetch list (or Table Row)
+
+	OP_COUNT_L			OP_COUNT_TR		; get # of list elements (or rows)
+
+	OP_GETSP	-3		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; compute group function
+	; for list			; for table
+	OP_GETSP	-3		OP_GETSP	-3
+	OP_GETSP	-3		OP_GETSP	-3
+	OP_FETCH_LIST			OP_SET_ROW
+					OP_FETCH_FIELD
+
+	OP_GET_SP	-2		; get accumulated group function results.
+
+	OP_MIN_I, OP_MIN_F, OP_MAX_I, OP_MAX_F, OP_SUM_I, OP_SUM_F	; do group function.
+
+	OP_PUTSP	-2		; Write group function results back.
+	OP_INCSP	-2		; index = index + 1
+
+	OP_BRANCH	LOOP		; lc3
+
+DONE:	OP_PUTSP	-3		; lc4
+	OP_POP
+	OP_POP
+----------------------------------------------------------------------
+COMPUTE LOOPS:
+
+	FOR v1, v2 IN <iterator> COMPUTE <grpfunc> WHERE
+		<body>
+
+	gencode(iterator)		; gencode for list expression.
+
+	OP_PUSH_I	0		; push index variable
+
+	; for integer
+	OP_PUSH_I	min/max/zero	OP_PUSH_F min/max/zero
+	; for float
+	OP_PUSH_F	min/max/zero	OP_PUSH_F min/max/zero
+
+LOOP:	OP_GETSP	-3		; (lc1) fetch list value (or table or string)
+	OP_COUNT_L			; get # of list elements (OP_COUNT_S, OP_COUNT_TR)
+	OP_GETSP	-3		; get index
+	OP_SUB_I
+	OP_BRANCH_ZERO (pop)DONE	; (lc2) does index equal length?
+
+	;;;;;;;; assign to variable v1
+	OP_GETSP	-3		; get list
+	OP_GETSP	-3		; get index value
+	OP_FETCH_LIST			; fetch current list item (OP_FETCH_FIELD, OP_FETCH_CHAR)
+	OP_ASSIGN	v1
+	OP_INCSP	-2		; index = index + 1
+
+	;;;;;;;; assign to variable v2
+	OP_GETSP	-3		; get list
+	OP_GETSP	-3		; get index value
+	OP_FETCH_LIST			; fetch current list item
+	OP_ASSIGN	v2
+	OP_INCSP	-2		; index = index + 1
+
+	; if WHERE clause exists:
+	gencode(body)			; gencode for the body of the loop
+	; else if no WHERE clause
+	OP_PUSH_I	1		; push TRUE on stack.
+
+	OP_BRANCH_FALSE	(pop) LOOP	; if body expression is false go to LOOP.
+
+	gencode(grpfunc->right)
+
+	OP_GETSP	-2		; get previous computed result.
+
+	OP_MIN_I, OP_MIN_F, OP_MAX_I, OP_MAX_F, OP_SUM_I, OP_SUM_F	; do group function.
+
+	OP_PUTSP	-2		; write group function results back.
+
+	OP_BRANCH	LOOP
+
+DONE:	OP_PUTSP	-3		; lc4
+	OP_POP
+
+----------------------------------------------------------------------
+LOOPS USING THE NEW GROUP FEATURE:
+
+Stand alone group function: MIN/MAX/SUM
+
+group ORDER_LINE_ITEMS_GROUP using ORDER_LINE_ITEMS is
+	previous_row.ITEM = current_row.ITEM
+
+rule xxxx is
+	li : {integer};
+
+	li := max(ORDER_LINE_ITEMS_GROUP.DC-CODE);	-- Returns a list of integers. Each element
+							-- is the maximum DC-CODE for each group.
+
+Psuedocode:
+-----------
+
+	list := {}
+	curr := 0;
+	prev := null;
+	nrows := GET_NUMBER_OF_ROWS(TABLE);
+	if( curr >= nrows )
+		GOTO out;
+next:
+	val := MIN/MAX/SUM_INITIAL_VALUE();
+
+loop:
+	newval := TABLE[curr].FIELD;
+	val := MIN/MAX/SUM(val, newval);
+
+	prev := curr;
+	INCREMENT(curr);
+	if( curr >= nrows ) {
+		APPEND(list, val);
+		GOTO out;
+	}
+
+	newgroup := GROUP_FUNCTION(prev, curr);
+
+	if( newgroup == FALSE ) {
+		APPEND(list, val);
+		GOTO next;
+	}
+	GOTO loop;
+out:
+	RETURN list
+
+
+Byte-codes:
+-----------
+	gencode(expr->left);		; get table row pointer
+	OP_PUSH_I	0		; push curr
+	OP_NULL_I			; push prev
+
+	OP_NULL_L			; list to be built.
+
+	OP_GETSP	-4		; get table row pointer
+	OP_COUNT_TR			; count
+
+lc1:	OP_BRANCH_ZERO	out		; no pop
+
+next:	; for integer
+	OP_PUSH_I	min/max/zero
+	; for float
+	OP_PUSH_F	min/max/zero
+	; for string
+	OP_PUSH_S	min/max/zero
+
+loop:	OP_GETSP	-6		; (lc1) fetch Table Row
+	OP_GETSP	-6		; fetch curr index.
+	OP_SET_ROW
+	OP_FETCH_FIELD
+
+	OP_GET_SP	-2		; get accumulated group function results.
+
+	OP_MIN_I, OP_MIN_F, OP_MIN_S, OP_MAX_I, OP_MAX_F, OP_MAX_S, OP_SUM_I, OP_SUM_F	; group function.
+
+	OP_PUTSP	-2		; Store accumulated results back to stack.
+
+	OP_GETSP	-5		; get curr index.
+	OP_PUTSP	-5		; prev := curr
+
+	OP_INCSP	-5		; INCREMENT(curr)
+
+	OP_GETSP	-5		; get curr
+	OP_GETSP	-3		; get nrows
+
+	OP_CMP_I			; curr - nrows
+	OP_GE				; (curr >= nrows)?
+
+lc2:	OP_BRANCH_FALSE	skip		; (pop)
+	OP_GETSP	-3		; get list
+	OP_GETSP	-2		; val
+	OP_APPEND			; add value to list.
+	OP_PUTSP	-4		; put list back into stack
+	OP_POP				; pop val
+lc3:	OP_BRANCH	out
+
+skip:	OP_GETSP	-6		; get table row pointer
+	OP_GETSP	-6		; arg 2: current_row
+	OP_SET_ROW
+
+	OP_GETSP	-7		; get table row pointer
+	OP_GETSP	-6		; arg 1: previous_row
+	OP_SET_ROW
+
+	OP_CALL		<entry_point to group function>
+
+	OP_BRANCH_TRUE	loop		; (pop)
+
+	OP_GETSP	-3		; get list
+	OP_GETSP	-2		; val
+	OP_APPEND			; add value to list.
+	OP_PUTSP	-4		; put list back into stack
+	OP_POP				; pop val
+	OP_BRANCH	next
+
+out:	OP_GETSP	-2
+	OP_PUTSP	-6
+	OP_POP
+	OP_POP
+	OP_POP
+	OP_POP
+
+
+----------------------------------------------------------------------
+LOOPS USING THE NEW GROUP FEATURE:
+
+Compute loops
+
+group ORDER_LINE_ITEMS_GROUP using ORDER_LINE_ITEMS is
+	previous_row.ITEM = current_row.ITEM
+
+rule xxxx is
+	li : {integer};
+
+	li := for var1, var2 in ORDER_LINE_ITEMS_GROUP compute max(<arg>)
+		where
+			<body>
+
+Psuedocode:
+-----------
+	list := {}
+	curr := 0;
+	prev := null;
+	nrows := GET_NUMBER_OF_ROWS(TABLE);
+	if( curr >= nrows )
+		GOTO out;
+
+next:	ASSIGN(var1,curr);
+	val := MIN/MAX/SUM_INITIAL_VALUE();
+
+loop:	ASSIGN(var2,curr);
+
+	bool = EVALUTE(body)
+	if( bool != TRUE )
+		GOTO false;
+
+	newval := EVALUATE(arg);
+	val := MIN/MAX/SUM(val, newval);
+
+false:	prev := curr;
+	INCREMENT(curr);
+	if( curr >= nrows ) {
+		APPEND(list, val);
+		GOTO out;
+	}
+
+	newgroup := GROUP_FUNCTION(prev, curr);
+
+	if( newgroup == FALSE ) {
+		APPEND(list, val);
+		GOTO next;
+	}
+	GOTO loop;
+
+out:	RETURN list
+
+
+Byte-codes:
+-----------
+	gencode(iterator);		; get table row pointer
+	OP_PUSH_I	0		; push curr
+	OP_NULL_I			; push prev
+
+	OP_NULL_L			; list to be built.
+
+	OP_GETSP	-4		; get table row pointer
+	OP_COUNT_TR			; count
+
+lc1:	OP_BRANCH_ZERO	out		; no pop
+
+next:	OP_GETSP	-6		; fetch table row
+	OP_GETSP	-6		; fetch curr index.
+	OP_SET_ROW
+	OP_ASSIGN	var1-ofsset	; (pop) assign table row to var1
+
+	; for integer
+	OP_PUSH_I	min/max/zero
+	; for float
+	OP_PUSH_F	min/max/zero
+	; for string
+	OP_PUSH_S	min/max/zero
+
+loop:	OP_GETSP	-6		; fetch table row
+	OP_GETSP	-6		; fetch curr index.
+	OP_SET_ROW
+	OP_ASSIGN	var2-ofsset	; (pop) assign table row to var1
+
+	gencode(body)			; evalute where expression.
+
+lc4:	OP_BRANCH_FALSE	false		; (pop)
+
+	gencode(arg)			; evalute group expression.
+	OP_GET_SP	-2		; get accumulated group function results.
+
+	OP_MIN_I, OP_MIN_F, OP_MIN_S, OP_MAX_I, OP_MAX_F, OP_MAX_S, OP_SUM_I, OP_SUM_F	; group function.
+
+	OP_PUTSP	-2		; Store accumulated results back to stack.
+
+false:	OP_GETSP	-5		; get curr index.
+	OP_PUTSP	-5		; prev := curr
+
+	OP_INCSP	-5		; INCREMENT(curr)
+
+	OP_GETSP	-5		; get curr
+	OP_GETSP	-3		; get nrows
+
+	OP_CMP_I			; curr - nrows
+	OP_GE				; (curr >= nrows)?
+
+lc2:	OP_BRANCH_FALSE	skip		; (pop)
+	OP_GETSP	-3		; get list
+	OP_GETSP	-2		; val
+	OP_APPEND			; add value to list.
+	OP_PUTSP	-4		; put list back into stack
+	OP_POP				; pop val
+lc3:	OP_BRANCH	out
+
+skip:	OP_GETSP	-6		; get table row pointer
+	OP_GETSP	-6		; arg 2: current_row
+	OP_SET_ROW
+
+	OP_GETSP	-7		; get table row pointer
+	OP_GETSP	-6		; arg 1: previous_row
+	OP_SET_ROW
+
+	OP_CALL		<entry_point to group function>
+
+	OP_BRANCH_TRUE	loop		; (pop)
+
+	OP_GETSP	-3		; get list
+	OP_GETSP	-2		; val
+	OP_APPEND			; add value to list.
+	OP_PUTSP	-4		; put list back into stack
+	OP_POP				; pop val
+	OP_BRANCH	next
+
+out:	OP_GETSP	-2
+	OP_PUTSP	-6
+	OP_POP
+	OP_POP
+	OP_POP
+	OP_POP
+
+----------------------------------------------------------------------
+LOOPS USING THE NEW GROUP FEATURE:
+for all & for some:
+
+group ORDER_LINE_ITEMS_GROUP using ORDER_LINE_ITEMS is
+	previous_row.ITEM = current_row.ITEM
+
+rule xxxx is
+	for all var1, var2 in ORDER_LINE_ITEMS_GROUP
+		<body>
+
+	for some var1, var2 in ORDER_LINE_ITEMS_GROUP
+		<body>
+
+
+Psuedocode:
+-----------
+	**FOR ALL**				**FOR SOME**
+	flag := TRUE;				flag := FALSE;
+	curr := 0;
+	prev := null;
+	nrows := GET_NUMBER_OF_ROWS(TABLE);
+	if( nrows == 0 )
+		GOTO out;
+
+next:	ASSIGN(var1,curr);
+	**FOR ALL**				**FOR SOME**
+	flag := TRUE;				flag := FALSE;
+
+loop:	ASSIGN(var2,curr);
+
+	bool = EVALUTE(body)
+
+	**FOR ALL**				**FOR SOME**
+	flag := flag AND bool;			flag := flag OR bool;
+
+	**FOR ALL**				**FOR SOME**
+	if( flag == FALSE )			    n/a
+		GOTO out;
+
+	prev := curr;
+	INCREMENT(curr);
+	if( curr >= nrows ) {
+		GOTO out;
+	}
+
+	newgroup := GROUP_FUNCTION(prev, curr);
+
+	if( newgroup == FALSE ) {
+		**FOR ALL**				**FOR SOME**
+		    n/a					if( flag == FALSE )
+								GOTO out;
+		GOTO next;
+	}
+	GOTO loop;
+
+out:	RETURN flag
+
+
+Byte-codes:
+-----------
+	gencode(iterator);		; get table row pointer
+	OP_PUSH_I	0		; push curr
+	OP_NULL_I			; push prev
+
+	**FOR ALL**				**FOR SOME**
+	OP_PUSH_I	1			OP_PUSH_I	0
+
+	OP_GETSP	-4		; get table row pointer
+	OP_COUNT_TR			; count
+
+lc1:	OP_BRANCH_ZERO	out		; no pop
+
+next:	OP_GETSP	-5		; fetch table row
+	OP_GETSP	-5		; fetch curr index.
+	OP_SET_ROW
+	OP_ASSIGN	var1-ofsset	; (pop) assign table row to var1
+
+	**FOR ALL**				**FOR SOME**
+	OP_PUSH_I	1			OP_PUSH_I	0
+	OP_PUTSP	-3
+
+loop:	OP_GETSP	-5		; fetch table row
+	OP_GETSP	-5		; fetch curr index.
+	OP_SET_ROW
+	OP_ASSIGN	var2-ofsset	; (pop) assign table row to var1
+
+	gencode(body)			; evalute for all/for some body expression
+
+	OP_GETSP	-3		; fetch flag
+
+	**FOR ALL**				**FOR SOME**
+	OP_AND					OP_OR
+
+	OP_PUTSP	-3
+
+	**FOR ALL**				**FOR SOME**
+	OP_GETSP	-2			n/a
+lc3:	OP_BRANCH_FALSE out		; (pop)
+	
+	OP_GETSP	-4		; get curr index.
+	OP_PUTSP	-4		; prev := curr
+
+	OP_INCSP	-4		; INCREMENT(curr)
+
+	OP_GETSP	-4		; get curr
+	OP_GETSP	-2		; get nrows
+
+	OP_CMP_I			; curr - nrows
+	OP_GE				; (curr >= nrows)?
+
+lc2:	OP_BRANCH_TRUE	out		; (pop)
+
+	OP_GETSP	-5		; get table row pointer
+	OP_GETSP	-5		; arg 2: current_row
+	OP_SET_ROW
+
+	OP_GETSP	-6		; get table row pointer
+	OP_GETSP	-5		; arg 1: previous_row
+	OP_SET_ROW
+
+	OP_CALL		<entry_point to group function>
+
+	OP_BRANCH_TRUE	loop		; (pop)
+
+	**FOR ALL**					**FOR SOME**
+	   n/a						OP_GETSP   -2
+						lc4:	OP_BRANCH_FALSE  out  ; (pop)
+	OP_BRANCH	next
+
+out:	OP_GETSP	-2
+	OP_PUTSP	-6
+	OP_POP
+	OP_POP
+	OP_POP
+	OP_POP
+
+----------------------------------------------------------------------
